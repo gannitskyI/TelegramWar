@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: 'UI '
+  m_EditorClassIdentifier: 
+  m_GroupName: 'UI '
+  m_GUID: cbc8f695b4101fd4ba4b8b30b44ce8db
+  m_SerializeEntries:
+  - m_GUID: 13ebd9e7c40bba340b2ed37f0bf583f4
+    m_Address: GameUI
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 53f0798f5716856499329414eb957637
+    m_Address: MainMenuUI
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9ab5e01493e549443a315d7634b17257
+    m_Address: GameOverUI
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a4c304900a4edaf46a0a408d0ee8e443
+    m_Address: UpgradeSelectionUI
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 1e16e69b683d66548835fcd678670a6b, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 18b673735716eff40af5e8595f1cfea2, type: 2}
+    - {fileID: 11400000, guid: 4f75dde897af0f945af4750625706c86, type: 2}

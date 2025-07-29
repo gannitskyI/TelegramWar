@@ -1,0 +1,54 @@
+{
+    "name": "PlayerControls",
+    "maps": [
+        {
+            "name": "Gameplay",
+            "id": "0a69b281-80ad-4969-8f47-a9e2faad1567",
+            "actions": [
+                {
+                    "name": "Move",
+                    "type": "Value",
+                    "id": "c3151b96-f9ce-4f87-8fe3-09faf120b73d",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Touch",
+                    "type": "PassThrough",
+                    "id": "a7d5f33e-fa5b-4747-bce9-98cd72a7c9da",
+                    "expectedControlType": "Touch",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "5aaa3a36-a9f3-4d72-8c28-39680d6a9308",
+                    "path": "<Mouse>/position",
+                    "interactions": "Press",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d1f8a23b-a7ba-4e5c-a34f-6c4fb7d1a076",
+                    "path": "<Touchscreen>/primaryTouch",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Touch",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
