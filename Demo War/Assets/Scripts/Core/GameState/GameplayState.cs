@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameplayState : GameState
 {
@@ -7,24 +8,16 @@ public class GameplayState : GameState
     private bool isRoundActive;
     private GameObject playerInstance;
     private GameplayUIController gameplayUIController;
-    private const string GAMEPLAY_UI_ID = "GameUI"; // РР·РјРµРЅРµРЅРѕ СЃ "GameplayUI" РЅР° "GameUI"
+    private const string GAMEPLAY_UI_ID = "GameUI";
     private bool isExiting = false;
+    private bool playerCreated = false;
 
     public override IEnumerator Enter()
     {
         isExiting = false;
+        playerCreated = false;
 
-        var config = ServiceLocator.Get<SystemsConfiguration>();
-        if (config == null)
-        {
-            Debug.LogError("SystemsConfiguration not found!");
-            gameTimer = 30f;
-        }
-        else
-        {
-            gameTimer = config.roundDuration;
-        }
-
+        gameTimer = 0f; // Инициализируем время с 0, отсчет идет вперед
         isRoundActive = true;
 
         yield return SetupGameplayUI();
@@ -36,6 +29,13 @@ public class GameplayState : GameState
         yield return CreatePlayer();
         if (isExiting) yield break;
 
+        if (playerInstance == null)
+        {
+            Debug.LogError("Player creation failed completely!");
+            yield break;
+        }
+
+        playerCreated = true;
         ActivateGameplaySystems();
         EnableGameplayInput();
     }
@@ -45,7 +45,7 @@ public class GameplayState : GameState
         var uiSystem = ServiceLocator.Get<UISystem>();
         if (uiSystem == null)
         {
-            Debug.LogError("UISystem not found! Cannot setup gameplay UI.");
+            Debug.LogError("UISystem not found!");
             yield break;
         }
 
@@ -58,9 +58,7 @@ public class GameplayState : GameState
         uiSystem.RegisterUIController(GAMEPLAY_UI_ID, gameplayUIController);
 
         yield return new WaitForSeconds(0.2f);
-
         uiSystem.ShowUI(GAMEPLAY_UI_ID);
-
         yield return new WaitForSeconds(0.1f);
     }
 
@@ -69,44 +67,82 @@ public class GameplayState : GameState
         var addressableManager = ServiceLocator.Get<AddressableManager>();
         if (addressableManager == null)
         {
-            Debug.LogWarning("AddressableManager not found. Skipping scene load.");
+            Debug.LogError("AddressableManager not found!");
             yield break;
         }
+
+        SceneManager.sceneLoaded += OnSceneLoaded;
 
         var sceneHandle = addressableManager.LoadSceneAsync("GameplayScene");
         if (sceneHandle.IsValid())
         {
             yield return new WaitUntil(() => sceneHandle.IsValid() && sceneHandle.IsDone);
         }
-        else
-        {
-            Debug.LogWarning("Failed to start scene loading. Continuing without scene change.");
-        }
+
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"Scene loaded: {scene.name}");
     }
 
     private IEnumerator CreatePlayer()
     {
-        var addressableManager = ServiceLocator.Get<AddressableManager>();
+        Debug.Log("Starting player creation");
+
+        ClearExistingPlayers();
+        yield return null;
+
         Vector3 spawnPosition = GetPlayerSpawnPosition();
+        Debug.Log($"Player spawn position: {spawnPosition}");
 
-        if (addressableManager == null)
+        var addressableManager = ServiceLocator.Get<AddressableManager>();
+
+        if (addressableManager != null)
         {
-            Debug.LogWarning("AddressableManager not found! Creating fallback player.");
-            CreateFallbackPlayer(spawnPosition);
-            yield break;
-        }
+            var playerTask = addressableManager.InstantiateAsync("PlayerPrefab", spawnPosition);
+            yield return new WaitUntil(() => playerTask.IsCompleted);
 
-        CreateFallbackPlayer(spawnPosition);
+            if (playerTask.Result != null)
+            {
+                playerInstance = playerTask.Result;
+                Debug.Log($"Player created from PlayerPrefab: {playerInstance.name}");
 
-        if (playerInstance != null)
-        {
-            SetupPlayerComponents();
-            RegisterPlayer();
-            Debug.Log("вњ“ Player created and setup completed");
+                SetupPlayerComponents();
+                RegisterPlayer();
+                yield break;
+            }
+            else
+            {
+                Debug.LogError("PlayerPrefab failed to instantiate!");
+            }
         }
         else
         {
-            Debug.LogError("вњ— Failed to create player!");
+            Debug.LogError("AddressableManager is null!");
+        }
+
+        Debug.LogError("Failed to create player - game cannot continue");
+    }
+
+    private void ClearExistingPlayers()
+    {
+        var existingPlayers = GameObject.FindGameObjectsWithTag("Player");
+        foreach (var existingPlayer in existingPlayers)
+        {
+            Debug.LogWarning($"Destroying existing player: {existingPlayer.name}");
+            Object.Destroy(existingPlayer);
+        }
+
+        var fallbackPlayers = GameObject.FindObjectsOfType<GameObject>();
+        foreach (var obj in fallbackPlayers)
+        {
+            if (obj.name.Contains("FallbackPlayer"))
+            {
+                Debug.LogWarning($"Destroying fallback player: {obj.name}");
+                Object.Destroy(obj);
+            }
         }
     }
 
@@ -123,83 +159,15 @@ public class GameplayState : GameState
         return Vector3.zero;
     }
 
-    private void CreateFallbackPlayer(Vector3 spawnPosition)
-    {
-        var fallbackPlayer = new GameObject("FallbackPlayer");
-        fallbackPlayer.transform.position = spawnPosition;
-
-        var renderer = fallbackPlayer.AddComponent<SpriteRenderer>();
-
-        var texture = new Texture2D(64, 64);
-        var colors = new Color[64 * 64];
-        for (int i = 0; i < colors.Length; i++)
-        {
-            float x = (i % 64) - 32f;
-            float y = (i / 64) - 32f;
-            float distance = Mathf.Sqrt(x * x + y * y);
-            colors[i] = distance < 30f ? Color.blue : Color.clear;
-        }
-        texture.SetPixels(colors);
-        texture.Apply();
-
-        var sprite = Sprite.Create(texture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f));
-        renderer.sprite = sprite;
-        renderer.sortingOrder = 10;
-
-        var rb2d = fallbackPlayer.AddComponent<Rigidbody2D>();
-        rb2d.gravityScale = 0f;
-        rb2d.linearDamping = 5f;
-        rb2d.freezeRotation = true;
-        rb2d.mass = 1f;
-
-        var triggerCollider = fallbackPlayer.AddComponent<CircleCollider2D>();
-        triggerCollider.isTrigger = true;
-        triggerCollider.radius = 0.6f;
-
-        var physicsCollider = fallbackPlayer.AddComponent<CircleCollider2D>();
-        physicsCollider.isTrigger = false;
-        physicsCollider.radius = 0.4f;
-
-        var playerHealth = fallbackPlayer.AddComponent<PlayerHealth>();
-        var playerCombat = fallbackPlayer.AddComponent<PlayerCombat>();
-        var playerMovement = fallbackPlayer.AddComponent<PlayerMovement>();
-
-        try
-        {
-            fallbackPlayer.tag = "Player";
-        }
-        catch (UnityException)
-        {
-            Debug.LogWarning("Player tag not found, using Untagged");
-        }
-
-        Object.DontDestroyOnLoad(fallbackPlayer);
-
-        var destroyWatcher = fallbackPlayer.AddComponent<PlayerDestroyWatcher>();
-
-        playerInstance = fallbackPlayer;
-    }
-
     private void SetupPlayerComponents()
     {
-        if (playerInstance == null)
-        {
-            Debug.LogError("SetupPlayerComponents called with null playerInstance!");
-            return;
-        }
+        if (playerInstance == null) return;
 
-        Object.DontDestroyOnLoad(playerInstance);
-
-        if (playerInstance.transform.position.y > 100f || playerInstance.transform.position.y < -100f)
-        {
-            Vector3 correctedPosition = GetPlayerSpawnPosition();
-            playerInstance.transform.position = correctedPosition;
-        }
+        Debug.Log($"Setting up components for player: {playerInstance.name}");
 
         var rb3d = playerInstance.GetComponent<Rigidbody>();
         if (rb3d != null)
         {
-            Debug.LogWarning("Removing 3D Rigidbody from player");
             Object.DestroyImmediate(rb3d);
         }
 
@@ -213,19 +181,10 @@ public class GameplayState : GameState
         rb2d.linearDamping = 5f;
         rb2d.freezeRotation = true;
 
-        if (playerInstance.GetComponent<PlayerDestroyWatcher>() == null)
-        {
-            playerInstance.AddComponent<PlayerDestroyWatcher>();
-        }
-
         var playerCombat = playerInstance.GetComponent<PlayerCombat>();
         if (playerCombat != null)
         {
             CoroutineRunner.StartRoutine(SafeInitializeComponent(playerCombat, "PlayerCombat"));
-        }
-        else
-        {
-            Debug.LogWarning("PlayerCombat component not found!");
         }
 
         var playerMovement = playerInstance.GetComponent<PlayerMovement>();
@@ -233,19 +192,12 @@ public class GameplayState : GameState
         {
             CoroutineRunner.StartRoutine(SafeInitializeComponent(playerMovement, "PlayerMovement"));
         }
-        else
-        {
-            Debug.LogWarning("PlayerMovement component not found!");
-        }
 
         var playerHealth = playerInstance.GetComponent<PlayerHealth>();
         if (playerHealth != null)
         {
             playerHealth.OnPlayerDied += OnPlayerDied;
-        }
-        else
-        {
-            Debug.LogWarning("PlayerHealth component not found!");
+            playerHealth.ResetHealth();
         }
     }
 
@@ -253,18 +205,22 @@ public class GameplayState : GameState
     {
         if (component == null)
         {
-            Debug.LogError($"{componentName} is null, cannot initialize");
+            Debug.LogWarning($"Component {componentName} is null");
             yield break;
         }
 
         yield return component.Initialize();
+        Debug.Log($"Component {componentName} initialized successfully");
     }
 
     private void RegisterPlayer()
     {
         if (playerInstance != null)
         {
+            ServiceLocator.Unregister<GameObject>();
             ServiceLocator.Register<GameObject>(playerInstance);
+            ServiceLocator.RegisterWeak<GameObject>(playerInstance);
+            Debug.Log($"Player registered in ServiceLocator: {playerInstance.name}");
         }
     }
 
@@ -273,25 +229,16 @@ public class GameplayState : GameState
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             spawnSystem.StartSpawning();
-        }
-        else
-        {
-            Debug.LogWarning("SpawnSystem not found");
+            Debug.Log("SpawnSystem activated");
         }
     }
 
     private void EnableGameplayInput()
     {
-        Debug.Log("Enabling gameplay input...");
-
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.EnableGameplayInput();
-            Debug.Log("вњ“ Gameplay input enabled");
-        }
-        else
-        {
-            Debug.LogWarning("InputReader not found");
+            Debug.Log("Gameplay input enabled");
         }
     }
 
@@ -299,8 +246,7 @@ public class GameplayState : GameState
     {
         if (isExiting) return;
 
-        Debug.Log("Player died! Ending gameplay.");
-
+        Debug.Log("Player died event triggered");
         CoroutineRunner.StartRoutine(EndGameplayAfterDelay());
     }
 
@@ -317,97 +263,37 @@ public class GameplayState : GameState
         var stateMachine = ServiceLocator.Get<GameStateMachine>();
         if (stateMachine != null)
         {
-            Debug.Log($"Transitioning to GameOver with score: {finalScore}");
             stateMachine.ChangeState(new GameOverState(finalScore));
-        }
-        else
-        {
-            Debug.LogError("GameStateMachine not found! Cannot transition to GameOver.");
         }
     }
 
     public override void Update()
     {
-        if (!isRoundActive || isExiting) return;
+        if (!isRoundActive || isExiting || !playerCreated) return;
 
-        try
+        if (playerInstance == null)
         {
-            if (playerInstance == null || playerInstance.gameObject == null)
-            {
-                Debug.LogError("Player instance is null or destroyed during gameplay!");
-                AttemptPlayerRecovery();
-                return;
-            }
-
-            if (playerInstance.name == null)
-            {
-                Debug.LogError("Player object is destroyed but reference still exists!");
-                playerInstance = null;
-                AttemptPlayerRecovery();
-                return;
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Exception checking player instance: {e.Message}");
-            playerInstance = null;
-            AttemptPlayerRecovery();
+            Debug.LogError("Player instance is null during gameplay! This should not happen.");
             return;
         }
+
+        gameTimer += Time.deltaTime; // Время идет вперед
 
         if (gameplayUIController != null)
         {
-            gameplayUIController.UpdateTimer(Time.time);
+            gameplayUIController.UpdateTimer(gameTimer);
         }
-    }
-
-    private void AttemptPlayerRecovery()
-    {
-        Debug.LogWarning("рџ”„ Attempting player recovery...");
-
-        var foundPlayer = GameObject.FindGameObjectWithTag("Player");
-        if (foundPlayer != null)
-        {
-            Debug.Log($"вњ“ Found player by tag: {foundPlayer.name} (ID: {foundPlayer.GetInstanceID()})");
-            playerInstance = foundPlayer;
-            RegisterPlayer();
-            return;
-        }
-
-        var playerHealthComponents = Object.FindObjectsOfType<PlayerHealth>();
-        if (playerHealthComponents.Length > 0)
-        {
-            playerInstance = playerHealthComponents[0].gameObject;
-            Debug.Log($"вњ“ Found player by PlayerHealth component: {playerInstance.name}");
-            RegisterPlayer();
-            return;
-        }
-
-        var allObjects = Object.FindObjectsOfType<GameObject>();
-        foreach (var obj in allObjects)
-        {
-            if (obj.name.Contains("Player") || obj.name.Contains("Fallback"))
-            {
-                playerInstance = obj;
-                Debug.Log($"вњ“ Found player by name search: {playerInstance.name}");
-                RegisterPlayer();
-                return;
-            }
-        }
-
-        Debug.LogError("вќЊ Player recovery failed - ending gameplay");
-        OnPlayerDied();
     }
 
     public override IEnumerator Exit()
     {
-        Debug.Log("=== EXITING GAMEPLAY STATE ===");
         isExiting = true;
+        isRoundActive = false;
+        playerCreated = false;
 
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             spawnSystem.StopSpawning();
-            Debug.Log("Spawn system stopped");
         }
 
         var uiSystem = ServiceLocator.Get<UISystem>();
@@ -418,62 +304,43 @@ public class GameplayState : GameState
                 uiSystem.HideUI(GAMEPLAY_UI_ID);
             }
             uiSystem.UnregisterUIController(GAMEPLAY_UI_ID);
-            Debug.Log("Gameplay UI cleaned up");
         }
 
         if (playerInstance != null)
         {
-            Debug.Log($"Cleaning up player: {playerInstance.name} (ID: {playerInstance.GetInstanceID()})");
-
             var playerHealth = playerInstance.GetComponent<PlayerHealth>();
             if (playerHealth != null)
             {
                 playerHealth.OnPlayerDied -= OnPlayerDied;
-                Debug.Log("Unsubscribed from PlayerHealth events");
             }
 
             var playerCombat = playerInstance.GetComponent<PlayerCombat>();
             if (playerCombat != null)
             {
                 playerCombat.Cleanup();
-                Debug.Log("PlayerCombat cleaned up");
             }
 
             var playerMovement = playerInstance.GetComponent<PlayerMovement>();
             if (playerMovement != null)
             {
                 playerMovement.Cleanup();
-                Debug.Log("PlayerMovement cleaned up");
             }
 
-            bool shouldDestroyPlayer = ShouldDestroyPlayerOnExit();
-
-            if (shouldDestroyPlayer)
+            var addressableManager = ServiceLocator.Get<AddressableManager>();
+            if (addressableManager != null)
             {
-                Debug.Log("Destroying player - full game exit");
-                Object.Destroy(playerInstance);
-                playerInstance = null;
+                addressableManager.ReleaseAsset(playerInstance);
             }
             else
             {
-                Debug.Log("Keeping player alive - temporary state change");
-                playerInstance.SetActive(false);
+                Object.Destroy(playerInstance);
             }
-        }
-        else
-        {
-            Debug.LogWarning("playerInstance was already null during Exit");
+            playerInstance = null;
         }
 
+        ServiceLocator.Unregister<GameObject>();
         gameplayUIController = null;
-        isRoundActive = false;
 
-        Debug.Log("=== GAMEPLAY STATE EXITED ===");
         yield return null;
-    }
-
-    private bool ShouldDestroyPlayerOnExit()
-    {
-        return true;
     }
 }

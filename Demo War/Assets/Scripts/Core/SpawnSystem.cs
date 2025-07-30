@@ -27,7 +27,7 @@ public class SpawnSystem : IInitializable, IUpdatable
     private float screenBoundaryOffset = 2f;
     private bool boundsCalculated = false;
 
-    public System.Collections.IEnumerator Initialize()
+    public IEnumerator Initialize()
     {
         config = ServiceLocator.Get<SystemsConfiguration>();
         if (config != null)
@@ -63,7 +63,7 @@ public class SpawnSystem : IInitializable, IUpdatable
         }
     }
 
-    private System.Collections.IEnumerator WarmupPoolsCoroutine()
+    private IEnumerator WarmupPoolsCoroutine()
     {
         if (enemyFactory == null) yield break;
         var warmupTask = enemyFactory.EnsureWarmedUp();
@@ -119,11 +119,11 @@ public class SpawnSystem : IInitializable, IUpdatable
 
     private void CheckWaveCompletion()
     {
-        bool timeExpired = waveTimer >= waveDuration;
+        bool timeExpired = waveTimer >= waveDuration; // Изменено для отсчета вперед
         bool allEnemiesSpawned = enemiesSpawnedThisWave >= enemiesToSpawnThisWave;
         bool noActiveEnemies = activeEnemies.Count == 0;
 
-        if ((timeExpired && allEnemiesSpawned) || (allEnemiesSpawned && noActiveEnemies))
+        if (timeExpired || (allEnemiesSpawned && noActiveEnemies))
         {
             StartNextWave();
         }
@@ -244,7 +244,7 @@ public class SpawnSystem : IInitializable, IUpdatable
         CoroutineRunner.StartRoutine(WaveTransitionDelay());
     }
 
-    private System.Collections.IEnumerator WaveTransitionDelay()
+    private IEnumerator WaveTransitionDelay()
     {
         yield return new WaitForSeconds(2f);
         spawnTimer = spawnInterval;
@@ -254,7 +254,7 @@ public class SpawnSystem : IInitializable, IUpdatable
     {
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
-            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI"); // Изменено с "GameplayUI" на "GameUI"
+            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
             gameplayUI?.UpdateWave(currentWave);
         }
     }
@@ -295,7 +295,7 @@ public class SpawnSystem : IInitializable, IUpdatable
     public int GetEnemiesSpawnedThisWave() => enemiesSpawnedThisWave;
     public int GetEnemiesToSpawnThisWave() => enemiesToSpawnThisWave;
     public bool IsSpawning() => isSpawning;
-    public float GetWaveTimeRemaining() => Mathf.Max(0, waveDuration - waveTimer);
+    public float GetWaveTimeRemaining() => waveTimer;  
     public int GetActiveEnemiesCount() => activeEnemies.Count;
     public bool IsWaveInProgress() => waveInProgress;
 }

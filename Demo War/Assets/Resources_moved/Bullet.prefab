@@ -11,7 +11,9 @@ GameObject:
   - component: {fileID: 7593994525440409060}
   - component: {fileID: 2054329790571355568}
   - component: {fileID: 1863430489617280810}
-  m_Layer: 0
+  - component: {fileID: -8403036130955388187}
+  - component: {fileID: 7335640878740824750}
+  m_Layer: 10
   m_Name: Bullet
   m_TagString: PlayerBullet
   m_Icon: {fileID: 0}
@@ -125,3 +127,46 @@ CapsuleCollider2D:
   m_Offset: {x: 0, y: 0}
   m_Size: {x: 1, y: 2}
   m_Direction: 0
+--- !u!114 &-8403036130955388187
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4430487017228575397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a37f3674456774ab35925af7c47003, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  damage: 10
+  team: 0
+  sourceName: 
+  sourceObject: {fileID: 0}
+--- !u!50 &7335640878740824750
+Rigidbody2D:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4430487017228575397}
+  m_BodyType: 0
+  m_Simulated: 1
+  m_UseFullKinematicContacts: 0
+  m_UseAutoMass: 0
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_GravityScale: 0
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_Interpolate: 0
+  m_SleepingMode: 1
+  m_CollisionDetection: 0
+  m_Constraints: 0

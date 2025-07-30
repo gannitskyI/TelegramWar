@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aa03f7d1a8c0e3a478d34cb3ec8904d6, type: 3}
   m_Name: SystemsConfiguration
   m_EditorClassIdentifier: 
-  roundDuration: 10
+  roundDuration: 30
   startingLives: 100
   initialSpawnDelay: 2
   spawnInterval: 1

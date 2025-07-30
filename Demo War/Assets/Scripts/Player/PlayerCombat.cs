@@ -11,7 +11,7 @@ public class PlayerCombat : MonoBehaviour, IInitializable
     [SerializeField] private float bulletSpeed = 15f;
 
     [Header("Bullet Settings")]
-    [SerializeField] private Transform firePoint; // Точка выстрела
+    [SerializeField] private Transform firePoint;
 
     public int InitializationOrder => 15;
 
@@ -20,23 +20,20 @@ public class PlayerCombat : MonoBehaviour, IInitializable
     private bool canAttack = true;
     private SystemsConfiguration config;
 
-    // Кэш для оптимизации
     private List<GameObject> enemyTargets = new List<GameObject>();
-    private float targetScanInterval = 0.1f; // Сканируем цели каждые 0.1 секунды
+    private float targetScanInterval = 0.1f;
     private float targetScanTimer;
 
     public IEnumerator Initialize()
     {
-        Debug.Log("PlayerCombat initialization started");
+        Debug.Log("[PLAYER COMBAT] Initialization started");
 
-        // Получаем конфигурацию
         config = ServiceLocator.Get<SystemsConfiguration>();
         if (config != null)
         {
             bulletDamage = config.playerDamage;
         }
 
-        // Если нет firePoint, создаем его
         if (firePoint == null)
         {
             var firePointGO = new GameObject("FirePoint");
@@ -48,7 +45,7 @@ public class PlayerCombat : MonoBehaviour, IInitializable
         attackTimer = 0f;
         targetScanTimer = 0f;
 
-        Debug.Log("PlayerCombat initialized");
+        Debug.Log("[PLAYER COMBAT] Initialized successfully");
         yield return null;
     }
 
@@ -56,18 +53,15 @@ public class PlayerCombat : MonoBehaviour, IInitializable
     {
         if (!canAttack) return;
 
-        // Обновляем таймеры
         attackTimer += Time.deltaTime;
         targetScanTimer += Time.deltaTime;
 
-        // Сканируем цели реже для оптимизации
         if (targetScanTimer >= targetScanInterval)
         {
             FindNearestEnemy();
             targetScanTimer = 0f;
         }
 
-        // Атакуем если есть цель и прошло достаточно времени
         if (attackTimer >= attackInterval && nearestEnemy != null)
         {
             Attack(nearestEnemy);
@@ -77,26 +71,23 @@ public class PlayerCombat : MonoBehaviour, IInitializable
 
     private void FindNearestEnemy()
     {
-        // Очищаем список и находим всех врагов через компоненты
         enemyTargets.Clear();
-        var allEnemyBehaviours = Object.FindObjectsOfType<EnemyBehaviour>();
+        var allEnemyReceivers = Object.FindObjectsOfType<EnemyDamageReceiver>();
 
         GameObject closestEnemy = null;
         float closestDistance = float.MaxValue;
 
-        foreach (var enemyBehaviour in allEnemyBehaviours)
+        foreach (var enemyReceiver in allEnemyReceivers)
         {
-            if (enemyBehaviour == null || !enemyBehaviour.IsAlive()) continue;
+            if (enemyReceiver == null || !enemyReceiver.IsAlive()) continue;
 
-            var enemy = enemyBehaviour.gameObject;
+            var enemy = enemyReceiver.gameObject;
             float distance = Vector3.Distance(transform.position, enemy.transform.position);
 
-            // Проверяем находится ли враг в радиусе атаки
             if (distance <= attackRange)
             {
                 enemyTargets.Add(enemy);
 
-                // Находим ближайшего
                 if (distance < closestDistance)
                 {
                     closestDistance = distance;
@@ -105,14 +96,12 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             }
         }
 
-        // Обновляем цель только если нашли ближайшего или потеряли текущую
         if (closestEnemy != null)
         {
             nearestEnemy = closestEnemy;
         }
         else if (nearestEnemy != null)
         {
-            // Проверяем, что текущая цель все еще в радиусе
             if (Vector3.Distance(transform.position, nearestEnemy.transform.position) > attackRange)
             {
                 nearestEnemy = null;
@@ -124,129 +113,129 @@ public class PlayerCombat : MonoBehaviour, IInitializable
     {
         if (target == null) return;
 
-        // Вычисляем направление к цели
         Vector3 direction = (target.transform.position - firePoint.position).normalized;
+        CreatePlayerBullet(firePoint.position, direction);
 
-        // Создаем пулю
-        CreateBullet(firePoint.position, direction);
-
-        // Поворачиваем игрока в сторону атаки (опционально)
         if (direction != Vector3.zero)
         {
             transform.rotation = Quaternion.LookRotation(Vector3.forward, direction);
         }
 
-        // Haptic feedback
         WebGLHelper.TriggerHapticFeedback("light");
-
-        Debug.Log($"Player attacked enemy at distance: {Vector3.Distance(transform.position, target.transform.position):F1}");
+        Debug.Log($"[PLAYER COMBAT] Attacked enemy at distance: {Vector3.Distance(transform.position, target.transform.position):F1}");
     }
 
-    private async void CreateBullet(Vector3 startPosition, Vector3 direction)
+    private async void CreatePlayerBullet(Vector3 startPosition, Vector3 direction)
     {
-        // Пытаемся загрузить префаб пули через Addressables
         var addressableManager = ServiceLocator.Get<AddressableManager>();
         GameObject bulletObject = null;
 
         if (addressableManager != null)
         {
-            try
-            {
-                bulletObject = await addressableManager.InstantiateAsync("PlayerBullet", startPosition);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"Failed to load bullet prefab: {e.Message}. Creating fallback bullet.");
-            }
+            bulletObject = await addressableManager.InstantiateAsync("PlayerBullet", startPosition);
         }
 
-        // Если не удалось загрузить префаб, создаем простую пулю
         if (bulletObject == null)
         {
-            bulletObject = CreateFallbackBullet(startPosition);
+            bulletObject = CreateFallbackPlayerBullet(startPosition);
         }
 
-        // Настраиваем пулю
-        var bullet = bulletObject.GetComponent<Bullet>();
-        if (bullet == null)
-        {
-            bullet = bulletObject.AddComponent<Bullet>();
-        }
-
-        // Инициализируем пулю с параметрами (указываем что это пуля игрока)
-        bullet.Initialize(bulletDamage, bulletSpeed, direction, BulletOwner.Player);
+        SetupPlayerBullet(bulletObject, direction);
     }
 
-    private GameObject CreateFallbackBullet(Vector3 position)
+    private GameObject CreateFallbackPlayerBullet(Vector3 position)
     {
-        // Создаем простую пулю если префаб не загрузился
         var bulletGO = new GameObject("PlayerBullet");
         bulletGO.transform.position = position;
 
-        // Добавляем визуал
         var renderer = bulletGO.AddComponent<SpriteRenderer>();
+        CreatePlayerBulletSprite(renderer);
 
-        // Создаем простой спрайт пули
-        var texture = new Texture2D(16, 16);
-        var colors = new Color[16 * 16];
+        var rb = bulletGO.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0f;
 
-        for (int i = 0; i < colors.Length; i++)
+        var collider = bulletGO.AddComponent<CircleCollider2D>();
+        collider.isTrigger = true;
+        collider.radius = 0.1f;
+
+        Debug.Log("[PLAYER COMBAT] Created fallback player bullet");
+        return bulletGO;
+    }
+
+    private void CreatePlayerBulletSprite(SpriteRenderer renderer)
+    {
+        int size = 16;
+        var texture = new Texture2D(size, size);
+        var colors = new Color[size * size];
+        Vector2 center = new Vector2(size / 2f, size / 2f);
+
+        for (int y = 0; y < size; y++)
         {
-            float x = (i % 16) - 8f;
-            float y = (i / 16) - 8f;
-            float distance = Mathf.Sqrt(x * x + y * y);
-            colors[i] = distance < 6f ? Color.yellow : Color.clear;
+            for (int x = 0; x < size; x++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                if (distance < size * 0.35f)
+                {
+                    colors[y * size + x] = Color.cyan;
+                }
+                else
+                {
+                    colors[y * size + x] = Color.clear;
+                }
+            }
         }
 
         texture.SetPixels(colors);
         texture.Apply();
 
-        var sprite = Sprite.Create(texture, new Rect(0, 0, 16, 16), new Vector2(0.5f, 0.5f));
+        var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         renderer.sprite = sprite;
-        renderer.sortingOrder = 5; // Убеждаемся что пуля видима
-
-        // Масштаб
-        bulletGO.transform.localScale = Vector3.one * 0.3f;
-
-        // Коллайдер
-        var collider = bulletGO.AddComponent<CircleCollider2D>();
-        collider.isTrigger = true;
-        collider.radius = 0.1f;
-
-        // Rigidbody для физики
-        var rb = bulletGO.AddComponent<Rigidbody2D>();
-        rb.gravityScale = 0f;
-
-        Debug.Log("Created fallback player bullet");
-        return bulletGO;
+        renderer.sortingOrder = 10;
+        renderer.color = Color.cyan;
     }
 
-    // Методы для улучшений (апгрейдов)
+    private void SetupPlayerBullet(GameObject bulletObject, Vector3 direction)
+    {
+        var rb = bulletObject.GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.linearVelocity = direction.normalized * bulletSpeed;
+        }
+
+        if (direction != Vector3.zero)
+        {
+            bulletObject.transform.rotation = Quaternion.LookRotation(Vector3.forward, direction);
+        }
+
+        string sourceName = $"Player Bullet (from {gameObject.name})";
+        bulletObject.SetupProjectileDamageSource(bulletDamage, DamageTeam.Player, sourceName, gameObject);
+
+        var projectileLifetime = bulletObject.AddComponent<ProjectileLifetime>();
+        projectileLifetime.Initialize(5f);
+
+        Debug.Log($"[PLAYER COMBAT] Created player bullet: {sourceName}, Damage: {bulletDamage}, Speed: {bulletSpeed}");
+    }
+
     public void UpgradeDamage(float multiplier)
     {
         bulletDamage *= multiplier;
-        Debug.Log($"Damage upgraded to: {bulletDamage}");
+        Debug.Log($"[PLAYER COMBAT] Damage upgraded to: {bulletDamage}");
     }
 
     public void UpgradeAttackSpeed(float multiplier)
     {
-        attackInterval *= (1f / multiplier); // Уменьшаем интервал = увеличиваем скорость
-        attackInterval = Mathf.Max(0.1f, attackInterval); // Минимальный интервал
-        Debug.Log($"Attack speed upgraded, interval: {attackInterval:F2}s");
+        attackInterval *= (1f / multiplier);
+        attackInterval = Mathf.Max(0.1f, attackInterval);
+        Debug.Log($"[PLAYER COMBAT] Attack speed upgraded, interval: {attackInterval:F2}s");
     }
 
     public void UpgradeRange(float multiplier)
     {
         attackRange *= multiplier;
-        Debug.Log($"Attack range upgraded to: {attackRange}");
+        Debug.Log($"[PLAYER COMBAT] Attack range upgraded to: {attackRange}");
     }
 
-    public void SetCanAttack(bool canAttack)
-    {
-        this.canAttack = canAttack;
-    }
-
-    // Геттеры для UI и статистики
+    public void SetCanAttack(bool canAttack) => this.canAttack = canAttack;
     public float GetAttackRange() => attackRange;
     public float GetAttackInterval() => attackInterval;
     public float GetBulletDamage() => bulletDamage;
@@ -258,57 +247,21 @@ public class PlayerCombat : MonoBehaviour, IInitializable
         nearestEnemy = null;
         enemyTargets.Clear();
         canAttack = false;
-        Debug.Log("PlayerCombat cleaned up");
+        Debug.Log("[PLAYER COMBAT] Cleaned up");
     }
 
-    // Дополнительные методы для управления боем
-    public void ForceFindTarget()
-    {
-        FindNearestEnemy();
-    }
+    public void ForceFindTarget() => FindNearestEnemy();
+    public void ForceAttack() { if (nearestEnemy != null) Attack(nearestEnemy); }
+    public List<GameObject> GetAllTargetsInRange() => new List<GameObject>(enemyTargets);
+    public bool IsEnemyInRange(GameObject enemy) => enemy != null && Vector3.Distance(transform.position, enemy.transform.position) <= attackRange;
+    public float GetTimeSinceLastAttack() => attackTimer;
+    public float GetTimeToNextAttack() => Mathf.Max(0, attackInterval - attackTimer);
+    public bool CanAttackNow() => canAttack && attackTimer >= attackInterval && nearestEnemy != null;
 
-    public void ForceAttack()
-    {
-        if (nearestEnemy != null)
-        {
-            Attack(nearestEnemy);
-        }
-    }
-
-    public List<GameObject> GetAllTargetsInRange()
-    {
-        return new List<GameObject>(enemyTargets);
-    }
-
-    public bool IsEnemyInRange(GameObject enemy)
-    {
-        if (enemy == null) return false;
-        float distance = Vector3.Distance(transform.position, enemy.transform.position);
-        return distance <= attackRange;
-    }
-
-    // Методы для получения статистики боя
-    public float GetTimeSinceLastAttack()
-    {
-        return attackTimer;
-    }
-
-    public float GetTimeToNextAttack()
-    {
-        return Mathf.Max(0, attackInterval - attackTimer);
-    }
-
-    public bool CanAttackNow()
-    {
-        return canAttack && attackTimer >= attackInterval && nearestEnemy != null;
-    }
-
-    // Визуализация радиуса атаки в редакторе
     void OnDrawGizmosSelected()
     {
-        Gizmos.color = canAttack ? Color.red : Color.gray;
+        Gizmos.color = canAttack ? Color.cyan : Color.gray;
 
-        // Рисуем окружность через сегменты
         Vector3 center = transform.position;
         int segments = 32;
         float angleStep = 360f / segments;
@@ -322,13 +275,11 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             prevPoint = newPoint;
         }
 
-        // Показываем текущую цель
         if (nearestEnemy != null)
         {
             Gizmos.color = Color.yellow;
             Gizmos.DrawLine(transform.position, nearestEnemy.transform.position);
 
-            // Показываем направление атаки
             if (firePoint != null)
             {
                 Gizmos.color = Color.green;
@@ -337,7 +288,6 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             }
         }
 
-        // Показываем все цели в радиусе
         Gizmos.color = Color.cyan;
         foreach (var target in enemyTargets)
         {
@@ -347,42 +297,32 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             }
         }
 
-        // Показываем точку выстрела
         if (firePoint != null)
         {
             Gizmos.color = Color.blue;
             Gizmos.DrawWireSphere(firePoint.position, 0.2f);
         }
     }
+}
 
-    // Debug методы
-    [ContextMenu("Force Find Enemies")]
-    private void DebugForceFindEnemies()
+public class ProjectileLifetime : MonoBehaviour
+{
+    private float lifetime;
+    private float timer;
+
+    public void Initialize(float projectileLifetime)
     {
-        FindNearestEnemy();
-        Debug.Log($"Found {enemyTargets.Count} enemies in range, nearest: {(nearestEnemy != null ? nearestEnemy.name : "none")}");
+        lifetime = projectileLifetime;
+        timer = 0f;
     }
 
-    [ContextMenu("Force Attack")]
-    private void DebugForceAttack()
+    private void Update()
     {
-        ForceAttack();
-    }
-
-    [ContextMenu("Show Combat Info")]
-    private void DebugShowCombatInfo()
-    {
-        Debug.Log($"=== Player Combat Info ===");
-        Debug.Log($"Can Attack: {canAttack}");
-        Debug.Log($"Attack Range: {attackRange}");
-        Debug.Log($"Attack Interval: {attackInterval:F2}s");
-        Debug.Log($"Time Since Last Attack: {attackTimer:F2}s");
-        Debug.Log($"Time To Next Attack: {GetTimeToNextAttack():F2}s");
-        Debug.Log($"Can Attack Now: {CanAttackNow()}");
-        Debug.Log($"Bullet Damage: {bulletDamage}");
-        Debug.Log($"Bullet Speed: {bulletSpeed}");
-        Debug.Log($"Targets In Range: {enemyTargets.Count}");
-        Debug.Log($"Nearest Enemy: {(nearestEnemy != null ? nearestEnemy.name : "none")}");
-        Debug.Log($"=============================");
+        timer += Time.deltaTime;
+        if (timer >= lifetime)
+        {
+            Debug.Log($"[PROJECTILE] Lifetime expired: {gameObject.name}");
+            Destroy(gameObject);
+        }
     }
 }

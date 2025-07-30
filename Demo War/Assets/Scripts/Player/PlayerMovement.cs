@@ -11,60 +11,76 @@ public class PlayerMovement : MonoBehaviour, IInitializable
     private Vector3 targetPosition;
     private Vector3 velocity;
     private bool isMoving;
-    private Rigidbody2D rb2d; // Используем 2D физику
+    private Rigidbody2D rb2d;
+    private bool isInitialized = false;
 
     public int InitializationOrder => 10;
 
+    private void OnDestroy()
+    {
+        Cleanup();
+    }
+
     public IEnumerator Initialize()
     {
-        // Получаем или создаем Rigidbody2D
         rb2d = GetComponent<Rigidbody2D>();
         if (rb2d == null)
         {
             rb2d = gameObject.AddComponent<Rigidbody2D>();
         }
 
-        // Настраиваем физику
-        rb2d.gravityScale = 0f; // Отключаем гравитацию
-        rb2d.linearDamping = 5f; // Демпфирование
-        rb2d.freezeRotation = true; // Запрещаем вращение
+        rb2d.gravityScale = 0f;
+        rb2d.linearDamping = 8f;
+        rb2d.freezeRotation = true;
 
-        // Получаем InputReader из ServiceLocator если не назначен
         if (inputReader == null)
         {
-            if (ServiceLocator.TryGet<InputReader>(out var locatorInputReader))
+            yield return TryGetInputReader();
+
+            if (inputReader == null)
             {
-                inputReader = locatorInputReader;
-                Debug.Log("InputReader obtained from ServiceLocator");
-            }
-            else
-            {
-                Debug.LogError("InputReader not found in ServiceLocator!");
+                isInitialized = false;
                 yield break;
             }
         }
 
-        // Подписываемся на события инпута
         inputReader.MoveEvent += HandleMoveInput;
         inputReader.MoveCancelEvent += HandleMoveCancel;
 
         targetPosition = transform.position;
+        isInitialized = true;
 
         Debug.Log($"PlayerMovement initialized at position: {transform.position}");
         yield return null;
     }
 
+    private IEnumerator TryGetInputReader()
+    {
+        int attempts = 0;
+        while (attempts < 5 && inputReader == null)
+        {
+            if (ServiceLocator.TryGet<InputReader>(out var locatorInputReader))
+            {
+                inputReader = locatorInputReader;
+                break;
+            }
+
+            attempts++;
+            yield return new WaitForSeconds(0.1f);
+        }
+    }
+
     private void HandleMoveInput(Vector2 worldPosition)
     {
-        // Ограничиваем движение в пределах экрана
+        if (!isInitialized) return;
+
         Vector3 clampedPosition = ClampToScreen(new Vector3(worldPosition.x, worldPosition.y, transform.position.z));
 
         targetPosition = clampedPosition;
         isMoving = true;
 
-        Debug.Log($"Move input: {worldPosition} -> clamped: {clampedPosition}");
+        Debug.Log($"Move target set to: {targetPosition}");
 
-        // Haptic feedback для мобильных
 #if UNITY_WEBGL && !UNITY_EDITOR
         WebGLHelper.TriggerHapticFeedback("light");
 #endif
@@ -72,8 +88,13 @@ public class PlayerMovement : MonoBehaviour, IInitializable
 
     private void HandleMoveCancel()
     {
+        if (!isInitialized) return;
+
         isMoving = false;
-        Debug.Log("Move cancelled");
+        if (rb2d != null)
+        {
+            rb2d.linearVelocity = Vector2.zero;
+        }
     }
 
     private Vector3 ClampToScreen(Vector3 position)
@@ -81,11 +102,9 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         var camera = Camera.main;
         if (camera == null) return position;
 
-        // Получаем границы экрана в мировых координатах
         Vector3 bottomLeft = camera.ScreenToWorldPoint(new Vector3(0, 0, camera.nearClipPlane));
         Vector3 topRight = camera.ScreenToWorldPoint(new Vector3(Screen.width, Screen.height, camera.nearClipPlane));
 
-        // Добавляем отступ чтобы игрок не выходил за границы
         float margin = 0.5f;
 
         float clampedX = Mathf.Clamp(position.x, bottomLeft.x + margin, topRight.x - margin);
@@ -96,9 +115,20 @@ public class PlayerMovement : MonoBehaviour, IInitializable
 
     void Update()
     {
-        if (isMoving && rb2d != null)
+        if (!isInitialized || rb2d == null) return;
+
+        if (isMoving)
         {
-            // Используем SmoothDamp для плавного движения
+            float distance = Vector3.Distance(transform.position, targetPosition);
+
+            if (distance < 0.1f)
+            {
+                isMoving = false;
+                rb2d.linearVelocity = Vector2.zero;
+                return;
+            }
+
+            Vector3 direction = (targetPosition - transform.position).normalized;
             Vector3 newPosition = Vector3.SmoothDamp(
                 transform.position,
                 targetPosition,
@@ -107,64 +137,51 @@ public class PlayerMovement : MonoBehaviour, IInitializable
                 moveSpeed
             );
 
-            // Применяем новую позицию через Rigidbody2D
             rb2d.MovePosition(newPosition);
-
-            // Останавливаемся если достигли цели
-            if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
-            {
-                isMoving = false;
-                rb2d.linearVelocity = Vector2.zero; // Останавливаем движение
-            }
         }
     }
 
     void FixedUpdate()
     {
-        // Альтернативный способ движения через FixedUpdate для более стабильной физики
-        if (isMoving && rb2d != null)
+        if (!isInitialized || rb2d == null || !isMoving) return;
+
+        Vector2 direction = (targetPosition - transform.position).normalized;
+        float distance = Vector2.Distance(transform.position, targetPosition);
+
+        if (distance > 0.1f)
         {
-            Vector2 direction = (targetPosition - transform.position).normalized;
-            float distance = Vector2.Distance(transform.position, targetPosition);
-
-            if (distance > 0.1f)
-            {
-                // Применяем силу для движения к цели
-                Vector2 force = direction * moveSpeed * rb2d.mass;
-                rb2d.AddForce(force, ForceMode2D.Force);
-
-                // Ограничиваем максимальную скорость
-                if (rb2d.linearVelocity.magnitude > moveSpeed)
-                {
-                    rb2d.linearVelocity = rb2d.linearVelocity.normalized * moveSpeed;
-                }
-            }
-            else
-            {
-                // Достигли цели
-                isMoving = false;
-                rb2d.linearVelocity = Vector2.zero;
-            }
+            float currentSpeed = Mathf.Min(moveSpeed, distance * 10f);
+            rb2d.linearVelocity = direction * currentSpeed;
+        }
+        else
+        {
+            isMoving = false;
+            rb2d.linearVelocity = Vector2.zero;
         }
     }
 
     public void Cleanup()
     {
+        isInitialized = false;
+        isMoving = false;
+
         if (inputReader != null)
         {
             inputReader.MoveEvent -= HandleMoveInput;
             inputReader.MoveCancelEvent -= HandleMoveCancel;
         }
 
-        Debug.Log("PlayerMovement cleaned up");
+        if (rb2d != null)
+        {
+            rb2d.linearVelocity = Vector2.zero;
+        }
     }
 
-    // Публичные методы для получения информации о движении
     public bool IsMoving() => isMoving;
     public Vector3 GetTargetPosition() => targetPosition;
     public float GetMoveSpeed() => moveSpeed;
+    public bool IsInitialized() => isInitialized;
 
-    // Метод для принудительной установки позиции (для телепортации/спавна)
     public void SetPosition(Vector3 position)
     {
         Vector3 clampedPosition = ClampToScreen(position);
@@ -181,10 +198,8 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         Debug.Log($"Player position set to: {clampedPosition}");
     }
 
-    // Метод для обновления скорости движения (для улучшений)
     public void SetMoveSpeed(float newSpeed)
     {
         moveSpeed = Mathf.Max(0.1f, newSpeed);
-        Debug.Log($"Move speed updated to: {moveSpeed}");
     }
 }

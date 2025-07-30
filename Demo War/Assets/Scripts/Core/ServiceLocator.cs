@@ -1,5 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System;
 using UnityEngine;
 
 public static class ServiceLocator
@@ -9,26 +9,32 @@ public static class ServiceLocator
 
     public static void Register<T>(T service) where T : class
     {
-        var type = typeof(T);
-        services[type] = service;
+        if (service == null)
+        {
+            Debug.LogError("Нельзя зарегистрировать null сервис");
+            return;
+        }
+        services[typeof(T)] = service;
     }
 
     public static void Register(Type type, object service)
     {
-        if (type == null || service == null) return;
+        if (type == null || service == null)
+        {
+            Debug.LogError("Нельзя зарегистрировать null тип или сервис");
+            return;
+        }
         services[type] = service;
     }
 
     public static T Get<T>() where T : class
     {
-        var type = typeof(T);
-        return services.TryGetValue(type, out var service) ? service as T : null;
+        return services.TryGetValue(typeof(T), out var service) ? service as T : null;
     }
 
     public static bool TryGet<T>(out T service) where T : class
     {
-        var type = typeof(T);
-        if (services.TryGetValue(type, out var serviceObj))
+        if (services.TryGetValue(typeof(T), out var serviceObj))
         {
             service = serviceObj as T;
             return service != null;
@@ -39,14 +45,17 @@ public static class ServiceLocator
 
     public static void RegisterWeak<T>(T service) where T : class
     {
-        var type = typeof(T);
-        weakServices[type] = new WeakReference(service);
+        if (service == null)
+        {
+            Debug.LogError("Нельзя зарегистрировать null слабый сервис");
+            return;
+        }
+        weakServices[typeof(T)] = new WeakReference(service);
     }
 
     public static bool TryGetWeak<T>(out T service) where T : class
     {
-        var type = typeof(T);
-        if (weakServices.TryGetValue(type, out var weakRef) && weakRef.IsAlive)
+        if (weakServices.TryGetValue(typeof(T), out var weakRef) && weakRef.IsAlive)
         {
             service = weakRef.Target as T;
             return service != null;
@@ -56,7 +65,6 @@ public static class ServiceLocator
     }
 
     public static bool IsRegistered<T>() where T : class => services.ContainsKey(typeof(T));
-
     public static bool IsRegistered(Type type) => services.ContainsKey(type);
 
     public static void Unregister<T>() where T : class
@@ -78,14 +86,10 @@ public static class ServiceLocator
         foreach (var kvp in weakServices)
         {
             if (!kvp.Value.IsAlive)
-            {
                 toRemove.Add(kvp.Key);
-            }
         }
 
         foreach (var type in toRemove)
-        {
             weakServices.Remove(type);
-        }
     }
 }
