@@ -2,33 +2,40 @@ using UnityEngine;
 
 public enum EnemyAttackType
 {
-    None,           // Только взрыв при столкновении
-    SingleShot,     // Одиночные выстрелы
-    BurstFire,      // Очереди
-    Spray,          // Веерная стрельба
-    Homing,         // Самонаводящиеся снаряды
-    Laser,          // Лазерная атака
-    Orbital,        // Орбитальные снаряды
-    Explosive       // Взрывчатые снаряды
+    None,
+    SingleShot,
+    BurstFire,
+    Spray,
+    Homing,
+    Laser,
+    Orbital,
+    Explosive
 }
 
 public enum EnemyMovementType
 {
-    DirectChase,    // Прямое преследование
-    CircularOrbit,  // Круговое движение вокруг игрока
-    ZigZag,         // Зигзагообразное движение
-    Stop,           // Останавливается на дистанции
-    Teleport,       // Телепортация
-    Wave,           // Волнообразное движение
-    Spiral,         // Спиральное движение
-    Bounce          // Отскоки от стен
+    DirectChase,
+    CircularOrbit,
+    ZigZag,
+    Stop,
+    Teleport,
+    Wave,
+    Spiral,
+    Bounce
 }
 
 [CreateAssetMenu(fileName = "EnemyConfig", menuName = "Game/Enemy Configuration")]
 public class EnemyConfig : ScriptableObject
 {
-    [Header("Basic Stats")]
+    [Header("Identity")]
+    [SerializeField] public string enemyId = "";
+    [Tooltip("ID will be auto-generated from asset name if left empty")]
     public string enemyName = "Enemy";
+    public EnemyTier tier = EnemyTier.Tier1;
+    public int minWaveNumber = 1;
+    public float difficultyValue = 1f;
+
+    [Header("Basic Stats")]
     public float maxHealth = 100f;
     public float moveSpeed = 3f;
     public float collisionDamage = 10f;
@@ -90,6 +97,79 @@ public class EnemyConfig : ScriptableObject
     public string deathSoundKey = "";
     public string movementSoundKey = "";
 
+    // Public property for accessing the ID
+    public string EnemyId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(enemyId))
+            {
+                GenerateEnemyId();
+            }
+            return enemyId;
+        }
+    }
+
+    private void GenerateEnemyId()
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            enemyId = "unknown_enemy";
+            return;
+        }
+
+        // Remove "Enemy_" prefix if exists
+        string baseName = name;
+        if (baseName.StartsWith("Enemy_"))
+        {
+            baseName = baseName.Substring(6);
+        }
+
+        // Convert to lowercase and replace spaces/special chars with underscores
+        enemyId = baseName.ToLower()
+            .Replace(" ", "_")
+            .Replace("-", "_")
+            .Replace("(", "")
+            .Replace(")", "")
+            .Replace("[", "")
+            .Replace("]", "");
+
+        // Remove multiple underscores
+        while (enemyId.Contains("__"))
+        {
+            enemyId = enemyId.Replace("__", "_");
+        }
+
+        // Remove leading/trailing underscores
+        enemyId = enemyId.Trim('_');
+
+        // Ensure it's not empty
+        if (string.IsNullOrEmpty(enemyId))
+        {
+            enemyId = "enemy_" + GetInstanceID().ToString().Replace("-", "");
+        }
+
+        Debug.Log($"Auto-generated Enemy ID: '{enemyId}' for asset '{name}'");
+    }
+
+    private void OnValidate()
+    {
+        // Auto-generate ID when asset is modified
+        if (string.IsNullOrEmpty(enemyId))
+        {
+            GenerateEnemyId();
+        }
+    }
+
+    private void Awake()
+    {
+        // Ensure ID is generated when asset is loaded
+        if (string.IsNullOrEmpty(enemyId))
+        {
+            GenerateEnemyId();
+        }
+    }
+
     public float GetEffectiveHealth()
     {
         return hasShield ? maxHealth + shieldHealth : maxHealth;
@@ -129,100 +209,81 @@ public class EnemyConfig : ScriptableObject
         return Vector2.Distance(enemyPos, targetPos) <= aggroRange;
     }
 
+    public float GetTierMultiplier()
+    {
+        return tier switch
+        {
+            EnemyTier.Tier1 => 1f,
+            EnemyTier.Tier2 => 1.5f,
+            EnemyTier.Tier3 => 2.25f,
+            EnemyTier.Tier4 => 3.5f,
+            EnemyTier.Tier5 => 5f,
+            _ => 1f
+        };
+    }
+
+    [ContextMenu("Regenerate Enemy ID")]
+    private void RegenerateId()
+    {
+        enemyId = "";
+        GenerateEnemyId();
+        Debug.Log($"Regenerated Enemy ID: {enemyId}");
+    }
+
     [ContextMenu("Validate Configuration")]
     private void ValidateConfig()
     {
+        var issues = new System.Collections.Generic.List<string>();
+
+        if (string.IsNullOrEmpty(EnemyId))
+            issues.Add("Enemy ID could not be generated");
+
         if (maxHealth <= 0f)
-            Debug.LogWarning($"[{enemyName}] Health should be greater than 0");
+            issues.Add("Health should be greater than 0");
 
         if (attackType != EnemyAttackType.None && attackDamage <= 0f)
-            Debug.LogWarning($"[{enemyName}] Attack damage should be greater than 0 for attacking enemies");
+            issues.Add("Attack damage should be greater than 0 for attacking enemies");
 
         if (attackRange > detectionRange)
-            Debug.LogWarning($"[{enemyName}] Attack range should not exceed detection range");
+            issues.Add("Attack range should not exceed detection range");
 
         if (optimalDistance > attackRange && attackType != EnemyAttackType.None)
-            Debug.LogWarning($"[{enemyName}] Optimal distance should be within attack range for attacking enemies");
+            issues.Add("Optimal distance should be within attack range for attacking enemies");
+
+        if (difficultyValue <= 0)
+            issues.Add("Difficulty value should be greater than 0");
+
+        if (issues.Count == 0)
+        {
+            Debug.Log($"? Enemy config '{enemyName}' (ID: {EnemyId}) validation passed!");
+        }
+        else
+        {
+            Debug.LogWarning($"Enemy config '{enemyName}' has {issues.Count} issues:");
+            foreach (var issue in issues)
+            {
+                Debug.LogWarning($"- {issue}");
+            }
+        }
     }
 
-    [ContextMenu("Create Preset - Weak Runner")]
-    private void CreateWeakRunner()
+    [ContextMenu("Auto-Calculate Difficulty")]
+    private void AutoCalculateDifficulty()
     {
-        enemyName = "Weak Runner";
-        maxHealth = 30f;
-        moveSpeed = 4f;
-        movementType = EnemyMovementType.DirectChase;
-        attackType = EnemyAttackType.None;
-        collisionDamage = 8f;
-        explosionDamage = 15f;
-        experienceDrop = 5;
-        enemyColor = Color.gray;
-    }
+        float baseDifficulty = GetTierMultiplier();
 
-    [ContextMenu("Create Preset - Gunner")]
-    private void CreateGunner()
-    {
-        enemyName = "Gunner";
-        maxHealth = 50f;
-        moveSpeed = 2f;
-        movementType = EnemyMovementType.Stop;
-        attackType = EnemyAttackType.SingleShot;
-        attackRange = 8f;
-        attackDamage = 12f;
-        attackInterval = 1.5f;
-        optimalDistance = 6f;
-        experienceDrop = 10;
-        enemyColor = Color.red;
-    }
+        float healthFactor = maxHealth / 100f;
+        float damageFactor = (attackDamage + collisionDamage) / 20f;
+        float speedFactor = moveSpeed / 3f;
+        float specialFactor = 1f;
 
-    [ContextMenu("Create Preset - Burst Soldier")]
-    private void CreateBurstSoldier()
-    {
-        enemyName = "Burst Soldier";
-        maxHealth = 75f;
-        moveSpeed = 2.5f;
-        movementType = EnemyMovementType.CircularOrbit;
-        attackType = EnemyAttackType.BurstFire;
-        burstCount = 3;
-        burstInterval = 0.3f;
-        burstCooldown = 4f;
-        attackRange = 10f;
-        experienceDrop = 15;
-        enemyColor = Color.magenta;
-    }
+        if (hasShield) specialFactor += 0.5f;
+        if (regeneratesHealth) specialFactor += 0.3f;
+        if (armor > 0) specialFactor += armor / 100f;
+        if (canSplit) specialFactor += 0.4f;
 
-    [ContextMenu("Create Preset - Tank")]
-    private void CreateTank()
-    {
-        enemyName = "Tank";
-        maxHealth = 200f;
-        moveSpeed = 1f;
-        movementType = EnemyMovementType.DirectChase;
-        attackType = EnemyAttackType.Explosive;
-        attackRange = 6f;
-        attackDamage = 25f;
-        armor = 20f;
-        hasShield = true;
-        shieldHealth = 50f;
-        experienceDrop = 30;
-        enemyColor = Color.black;
-    }
+        difficultyValue = baseDifficulty * healthFactor * damageFactor * speedFactor * specialFactor;
 
-    [ContextMenu("Create Preset - Sniper")]
-    private void CreateSniper()
-    {
-        enemyName = "Sniper";
-        maxHealth = 40f;
-        moveSpeed = 1.5f;
-        movementType = EnemyMovementType.Stop;
-        attackType = EnemyAttackType.Homing;
-        attackRange = 15f;
-        attackDamage = 20f;
-        attackInterval = 3f;
-        optimalDistance = 12f;
-        fleeWhenLowHealth = true;
-        retreatThreshold = 0.5f;
-        experienceDrop = 20;
-        enemyColor = Color.cyan;
+        Debug.Log($"Auto-calculated difficulty for {enemyName}: {difficultyValue:F2}");
     }
 }

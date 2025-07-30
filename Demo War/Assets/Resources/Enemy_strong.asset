@@ -10,22 +10,26 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 570d7c836fb2c374089c0d093e60161c, type: 3}
-  m_Name: Enemy_sniperConfig
+  m_Name: Enemy_strong
   m_EditorClassIdentifier: 
+  enemyId: strong
   enemyName: Enemy
-  maxHealth: 10
-  moveSpeed: 1
+  tier: 3
+  minWaveNumber: 1
+  difficultyValue: 1
+  maxHealth: 100
+  moveSpeed: 3
   collisionDamage: 10
   explosionDamage: 20
-  experienceDrop: 1
+  experienceDrop: 10
   scale: 1
-  movementType: 4
+  movementType: 0
   detectionRange: 10
   optimalDistance: 5
   movementAmplitude: 2
   movementFrequency: 1
   canMoveOffScreen: 0
-  attackType: 1
+  attackType: 0
   attackRange: 8
   attackDamage: 15
   attackInterval: 2

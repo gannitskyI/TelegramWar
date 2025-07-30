@@ -1,12 +1,17 @@
 using UnityEngine;
 using System.Collections;
 
+[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(SpriteRenderer))]
 public class EnemyBehaviour : MonoBehaviour, IEnemy
 {
+    [Header("Enemy Configuration")]
+    [SerializeField] private EnemyConfig enemyConfig;
+
     private float currentHealth;
     private float currentShieldHealth;
     private float moveSpeed;
-    private EnemyConfig config;
     private System.Action onReturnToPool;
     private bool isInitialized;
     private bool hasExploded = false;
@@ -36,31 +41,45 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             layersInitialized = true;
         }
 
-        EnsureRequiredComponents();
+        CacheComponents();
+        SetupDamageReceiver();
     }
 
-    private void EnsureRequiredComponents()
+    private void CacheComponents()
     {
         cachedRigidbody = GetComponent<Rigidbody2D>();
-        if (cachedRigidbody == null)
+        cachedRenderer = GetComponent<SpriteRenderer>();
+
+        if (cachedRigidbody != null)
         {
-            cachedRigidbody = gameObject.AddComponent<Rigidbody2D>();
             cachedRigidbody.gravityScale = 0f;
             cachedRigidbody.linearDamping = 2f;
         }
 
-        if (GetComponent<Collider2D>() == null)
+        var collider = GetComponent<Collider2D>();
+        if (collider != null)
         {
-            var collider = gameObject.AddComponent<CircleCollider2D>();
             collider.isTrigger = true;
-            collider.radius = 0.4f;
+        }
+    }
+
+    private void SetupDamageReceiver()
+    {
+        if (GetComponent<EnemyDamageReceiver>() == null)
+        {
+            gameObject.AddComponent<EnemyDamageReceiver>();
+        }
+    }
+
+    public void InitializeFromPrefab(System.Action onReturnToPool = null)
+    {
+        if (enemyConfig == null)
+        {
+            Debug.LogError($"Enemy {gameObject.name}: No EnemyConfig assigned!");
+            return;
         }
 
-        cachedRenderer = GetComponent<SpriteRenderer>();
-        if (cachedRenderer == null)
-        {
-            cachedRenderer = gameObject.AddComponent<SpriteRenderer>();
-        }
+        Initialize(enemyConfig, onReturnToPool);
     }
 
     public void Initialize(EnemyConfig config, System.Action onReturnToPool = null)
@@ -71,7 +90,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             return;
         }
 
-        this.config = config;
+        this.enemyConfig = config;
         this.onReturnToPool = onReturnToPool;
 
         currentHealth = config.maxHealth;
@@ -98,32 +117,82 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         if (enemyLayer != -1) gameObject.layer = enemyLayer;
 
         gameObject.SetActive(true);
-        Debug.Log($"Enemy {config.enemyName} initialized with health={currentHealth}");
+        Debug.Log($"Enemy {config.enemyName} (ID: {config.EnemyId}) initialized with health={currentHealth}");
     }
 
-    public void InitializeForPool(EnemyConfig config)
+    public void InitializeForPool(EnemyConfig config = null)
     {
-        this.config = config;
-        currentHealth = config.maxHealth;
-        currentShieldHealth = config.hasShield ? config.shieldHealth : 0f;
-        moveSpeed = config.moveSpeed;
+        if (config != null)
+        {
+            this.enemyConfig = config;
+        }
+
+        if (enemyConfig == null)
+        {
+            Debug.LogError($"Enemy {gameObject.name}: No EnemyConfig available for pool initialization");
+            return;
+        }
+
+        currentHealth = enemyConfig.maxHealth;
+        currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
+        moveSpeed = enemyConfig.moveSpeed;
         isInitialized = true;
         hasExploded = false;
         SetupVisuals();
     }
 
+    public void ResetForReuse(System.Action onReturnToPool = null)
+    {
+        if (enemyConfig == null)
+        {
+            Debug.LogError($"Enemy {gameObject.name}: No EnemyConfig available for reuse");
+            return;
+        }
+
+        this.onReturnToPool = onReturnToPool;
+
+        currentHealth = enemyConfig.maxHealth;
+        currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
+        moveSpeed = enemyConfig.moveSpeed;
+        hasExploded = false;
+        isRetreating = false;
+        attackTimer = 0f;
+        burstShotsRemaining = 0;
+        isInBurstMode = false;
+        movementTimer = 0f;
+        healthRegenTimer = 0f;
+
+        if (cachedRenderer != null)
+        {
+            cachedRenderer.color = enemyConfig.enemyColor;
+        }
+
+        if (cachedRigidbody != null)
+        {
+            cachedRigidbody.linearVelocity = Vector2.zero;
+            cachedRigidbody.angularVelocity = 0f;
+        }
+
+        CachePlayerReference();
+        Debug.Log($"Enemy {enemyConfig.enemyName} reset for reuse");
+    }
+
     private void SetupVisuals()
     {
-        if (cachedRenderer == null || config == null) return;
+        if (cachedRenderer == null || enemyConfig == null) return;
 
-        CreateEnemySprite();
-        cachedRenderer.color = config.enemyColor;
+        if (cachedRenderer.sprite == null)
+        {
+            CreateEnemySprite();
+        }
+
+        cachedRenderer.color = enemyConfig.enemyColor;
         cachedRenderer.sortingOrder = 5;
     }
 
     private void CreateEnemySprite()
     {
-        int size = Mathf.RoundToInt(32 * config.scale);
+        int size = Mathf.RoundToInt(32 * enemyConfig.scale);
         var texture = new Texture2D(size, size);
         var colors = new Color[size * size];
         Vector2 center = new Vector2(size / 2f, size / 2f);
@@ -137,7 +206,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
                 if (distance < radius)
                 {
                     float alpha = 1f - (distance / radius) * 0.3f;
-                    colors[y * size + x] = new Color(config.enemyColor.r, config.enemyColor.g, config.enemyColor.b, alpha);
+                    colors[y * size + x] = new Color(enemyConfig.enemyColor.r, enemyConfig.enemyColor.g, enemyConfig.enemyColor.b, alpha);
                 }
                 else
                 {
@@ -166,7 +235,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void Update()
     {
-        if (!gameObject.activeSelf || !isInitialized || hasExploded || playerTransform == null)
+        if (!gameObject.activeSelf || !isInitialized || hasExploded || playerTransform == null || enemyConfig == null)
             return;
 
         CachePlayerReference();
@@ -182,19 +251,19 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void UpdateHealthRegeneration()
     {
-        if (!config.regeneratesHealth || currentHealth >= config.maxHealth) return;
+        if (!enemyConfig.regeneratesHealth || currentHealth >= enemyConfig.maxHealth) return;
 
         healthRegenTimer += Time.deltaTime;
         if (healthRegenTimer >= 1f)
         {
-            currentHealth = Mathf.Min(config.maxHealth, currentHealth + config.healthRegenRate);
+            currentHealth = Mathf.Min(enemyConfig.maxHealth, currentHealth + enemyConfig.healthRegenRate);
             healthRegenTimer = 0f;
         }
     }
 
     private void UpdateMovement(float distanceToPlayer)
     {
-        if (config.ShouldFlee(currentHealth) && !isRetreating)
+        if (enemyConfig.ShouldFlee(currentHealth) && !isRetreating)
         {
             isRetreating = true;
         }
@@ -214,13 +283,13 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             return currentPos + fleeDirection * moveSpeed * Time.deltaTime * 2f;
         }
 
-        switch (config.movementType)
+        switch (enemyConfig.movementType)
         {
             case EnemyMovementType.DirectChase:
                 return playerPos;
 
             case EnemyMovementType.Stop:
-                if (distanceToPlayer > config.optimalDistance)
+                if (distanceToPlayer > enemyConfig.optimalDistance)
                     return Vector2.MoveTowards(currentPos, playerPos, 0.1f);
                 return currentPos;
 
@@ -243,55 +312,43 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private Vector2 CalculateOrbitPosition(Vector2 playerPos, Vector2 currentPos)
     {
-        movementTimer += Time.deltaTime * config.movementFrequency;
-
+        movementTimer += Time.deltaTime * enemyConfig.movementFrequency;
         float angle = movementTimer;
-        float orbitRadius = config.optimalDistance;
-
+        float orbitRadius = enemyConfig.optimalDistance;
         Vector2 orbitCenter = playerPos;
         Vector2 orbitPosition = orbitCenter + new Vector2(
             Mathf.Cos(angle) * orbitRadius,
             Mathf.Sin(angle) * orbitRadius
         );
-
         return orbitPosition;
     }
 
     private Vector2 CalculateZigZagPosition(Vector2 playerPos, Vector2 currentPos)
     {
-        movementTimer += Time.deltaTime * config.movementFrequency;
-
+        movementTimer += Time.deltaTime * enemyConfig.movementFrequency;
         Vector2 directionToPlayer = (playerPos - currentPos).normalized;
         Vector2 perpendicular = new Vector2(-directionToPlayer.y, directionToPlayer.x);
-
-        float zigzagOffset = Mathf.Sin(movementTimer) * config.movementAmplitude;
-
+        float zigzagOffset = Mathf.Sin(movementTimer) * enemyConfig.movementAmplitude;
         return currentPos + directionToPlayer * moveSpeed * Time.deltaTime +
                perpendicular * zigzagOffset * Time.deltaTime;
     }
 
     private Vector2 CalculateWavePosition(Vector2 playerPos, Vector2 currentPos)
     {
-        movementTimer += Time.deltaTime * config.movementFrequency;
-
+        movementTimer += Time.deltaTime * enemyConfig.movementFrequency;
         Vector2 directionToPlayer = (playerPos - currentPos).normalized;
         Vector2 perpendicular = new Vector2(-directionToPlayer.y, directionToPlayer.x);
-
-        float waveOffset = Mathf.Sin(movementTimer) * config.movementAmplitude;
-
+        float waveOffset = Mathf.Sin(movementTimer) * enemyConfig.movementAmplitude;
         return Vector2.MoveTowards(currentPos, playerPos, moveSpeed * Time.deltaTime) +
                perpendicular * waveOffset * Time.deltaTime;
     }
 
     private Vector2 CalculateSpiralPosition(Vector2 playerPos, Vector2 currentPos)
     {
-        movementTimer += Time.deltaTime * config.movementFrequency;
-
+        movementTimer += Time.deltaTime * enemyConfig.movementFrequency;
         float distance = Vector2.Distance(currentPos, playerPos);
         float angle = movementTimer;
-
-        float targetRadius = Mathf.Max(config.optimalDistance, distance - moveSpeed * Time.deltaTime);
-
+        float targetRadius = Mathf.Max(enemyConfig.optimalDistance, distance - moveSpeed * Time.deltaTime);
         return playerPos + new Vector2(
             Mathf.Cos(angle) * targetRadius,
             Mathf.Sin(angle) * targetRadius
@@ -317,20 +374,20 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void UpdateAttack(float distanceToPlayer)
     {
-        if (config.attackType == EnemyAttackType.None ||
-            !config.IsInAttackRange(transform.position, playerTransform.position))
+        if (enemyConfig.attackType == EnemyAttackType.None ||
+            !enemyConfig.IsInAttackRange(transform.position, playerTransform.position))
             return;
 
-        if (!config.canAttackWhileMoving && cachedRigidbody.linearVelocity.magnitude > 0.1f)
+        if (!enemyConfig.canAttackWhileMoving && cachedRigidbody.linearVelocity.magnitude > 0.1f)
             return;
 
         attackTimer += Time.deltaTime;
 
-        if (config.attackType == EnemyAttackType.BurstFire)
+        if (enemyConfig.attackType == EnemyAttackType.BurstFire)
         {
             UpdateBurstAttack();
         }
-        else if (attackTimer >= config.attackInterval)
+        else if (attackTimer >= enemyConfig.attackInterval)
         {
             PerformAttack();
             attackTimer = 0f;
@@ -341,10 +398,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         if (!isInBurstMode)
         {
-            if (attackTimer >= config.burstCooldown)
+            if (attackTimer >= enemyConfig.burstCooldown)
             {
                 isInBurstMode = true;
-                burstShotsRemaining = config.burstCount;
+                burstShotsRemaining = enemyConfig.burstCount;
                 burstTimer = 0f;
                 attackTimer = 0f;
             }
@@ -352,7 +409,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         else
         {
             burstTimer += Time.deltaTime;
-            if (burstTimer >= config.burstInterval && burstShotsRemaining > 0)
+            if (burstTimer >= enemyConfig.burstInterval && burstShotsRemaining > 0)
             {
                 PerformAttack();
                 burstShotsRemaining--;
@@ -371,7 +428,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         ShowAttackWarning();
 
-        switch (config.attackType)
+        switch (enemyConfig.attackType)
         {
             case EnemyAttackType.SingleShot:
                 FireSingleProjectile();
@@ -393,7 +450,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void ShowAttackWarning()
     {
-        if (config.attackWarningDuration > 0f)
+        if (enemyConfig.attackWarningDuration > 0f)
         {
             StartCoroutine(AttackWarningEffect());
         }
@@ -402,17 +459,15 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     private IEnumerator AttackWarningEffect()
     {
         Color originalColor = cachedRenderer.color;
-        cachedRenderer.color = config.attackWarningColor;
-
-        yield return new WaitForSeconds(config.attackWarningDuration);
-
+        cachedRenderer.color = enemyConfig.attackWarningColor;
+        yield return new WaitForSeconds(enemyConfig.attackWarningDuration);
         cachedRenderer.color = originalColor;
     }
 
     private void FireSingleProjectile()
     {
         Vector2 direction = (playerTransform.position - transform.position).normalized;
-        CreateProjectile(direction, config.projectileSpeed, false);
+        CreateProjectile(direction, enemyConfig.projectileSpeed, false);
     }
 
     private void FireSprayProjectiles()
@@ -420,26 +475,25 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         Vector2 baseDirection = (playerTransform.position - transform.position).normalized;
         float baseAngle = Mathf.Atan2(baseDirection.y, baseDirection.x) * Mathf.Rad2Deg;
 
-        for (int i = 0; i < config.projectileCount; i++)
+        for (int i = 0; i < enemyConfig.projectileCount; i++)
         {
-            float angleOffset = (i - (config.projectileCount - 1) * 0.5f) * config.spreadAngle;
+            float angleOffset = (i - (enemyConfig.projectileCount - 1) * 0.5f) * enemyConfig.spreadAngle;
             float finalAngle = (baseAngle + angleOffset) * Mathf.Deg2Rad;
-
             Vector2 direction = new Vector2(Mathf.Cos(finalAngle), Mathf.Sin(finalAngle));
-            CreateProjectile(direction, config.projectileSpeed, false);
+            CreateProjectile(direction, enemyConfig.projectileSpeed, false);
         }
     }
 
     private void FireHomingProjectile()
     {
         Vector2 direction = (playerTransform.position - transform.position).normalized;
-        CreateProjectile(direction, config.projectileSpeed * 0.8f, true);
+        CreateProjectile(direction, enemyConfig.projectileSpeed * 0.8f, true);
     }
 
     private void FireExplosiveProjectile()
     {
         Vector2 direction = (playerTransform.position - transform.position).normalized;
-        CreateProjectile(direction, config.projectileSpeed * 0.6f, false, true);
+        CreateProjectile(direction, enemyConfig.projectileSpeed * 0.6f, false, true);
     }
 
     private void CreateProjectile(Vector2 direction, float speed, bool isHoming, bool isExplosive = false)
@@ -459,14 +513,14 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         collider.radius = 0.15f;
 
         var projectile = projectileGO.AddComponent<EnemyProjectile>();
-        projectile.Initialize(config.attackDamage, speed, config.projectileLifetime, isHoming, isExplosive);
+        projectile.Initialize(enemyConfig.attackDamage, speed, enemyConfig.projectileLifetime, isHoming, isExplosive);
 
         try { projectileGO.tag = "EnemyBullet"; } catch { }
 
         int bulletLayer = LayerMask.NameToLayer("EnemyBullet");
         if (bulletLayer != -1) projectileGO.layer = bulletLayer;
 
-        Debug.Log($"Enemy {config.enemyName} created projectile at {projectileGO.transform.position}");
+        Debug.Log($"Enemy {enemyConfig.enemyName} created projectile at {projectileGO.transform.position}");
     }
 
     private void CreateProjectileSprite(SpriteRenderer renderer, bool isHoming, bool isExplosive)
@@ -503,8 +557,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         renderer.sprite = sprite;
         renderer.sortingOrder = 10;
         renderer.color = projectileColor;
-
-        Debug.Log($"Created projectile sprite: size={size}, color={projectileColor}, sortingOrder=10");
     }
 
     private void UpdateTimers()
@@ -514,10 +566,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     public void TakeDamage(float damageAmount)
     {
-        if (!isInitialized || hasExploded || config.immuneToPlayerBullets)
+        if (!isInitialized || hasExploded || enemyConfig.immuneToPlayerBullets)
             return;
 
-        float actualDamage = config.CalculateDamageReduction(damageAmount);
+        float actualDamage = enemyConfig.CalculateDamageReduction(damageAmount);
 
         if (currentShieldHealth > 0f)
         {
@@ -531,12 +583,12 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             currentHealth -= actualDamage;
         }
 
-        Debug.Log($"Enemy {config.enemyName}: Took {actualDamage} damage, health={currentHealth}, shield={currentShieldHealth}");
+        Debug.Log($"Enemy {enemyConfig.enemyName}: Took {actualDamage} damage, health={currentHealth}, shield={currentShieldHealth}");
 
         if (gameObject.activeInHierarchy)
             StartCoroutine(DamageFlash());
 
-        if (config.stunDuration > 0f)
+        if (enemyConfig.stunDuration > 0f)
         {
             StartCoroutine(StunEffect());
         }
@@ -561,9 +613,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         float originalSpeed = moveSpeed;
         moveSpeed = 0f;
-
-        yield return new WaitForSeconds(config.stunDuration);
-
+        yield return new WaitForSeconds(enemyConfig.stunDuration);
         moveSpeed = originalSpeed;
     }
 
@@ -572,14 +622,14 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         if (hasExploded) return;
         hasExploded = true;
 
-        if (config.canSplit && config.splitCount > 0)
+        if (enemyConfig.canSplit && enemyConfig.splitCount > 0)
         {
             CreateSplitEnemies();
         }
 
         CreateExperienceParticles();
 
-        if (config.hasDeathAnimation)
+        if (enemyConfig.hasDeathAnimation)
         {
             StartCoroutine(DeathAnimation());
         }
@@ -591,17 +641,17 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void CreateSplitEnemies()
     {
-        for (int i = 0; i < config.splitCount; i++)
+        for (int i = 0; i < enemyConfig.splitCount; i++)
         {
             Vector2 randomDirection = Random.insideUnitCircle.normalized;
             Vector3 spawnPos = transform.position + (Vector3)randomDirection * 0.5f;
 
-            var splitEnemy = new GameObject($"Split_{config.enemyName}");
+            var splitEnemy = new GameObject($"Split_{enemyConfig.enemyName}");
             splitEnemy.transform.position = spawnPos;
 
             var splitBehaviour = splitEnemy.AddComponent<EnemyBehaviour>();
-            var splitConfig = Instantiate(config);
-            splitConfig.maxHealth *= config.splitHealthRatio;
+            var splitConfig = Instantiate(enemyConfig);
+            splitConfig.maxHealth *= enemyConfig.splitHealthRatio;
             splitConfig.scale *= 0.7f;
             splitConfig.canSplit = false;
 
@@ -611,7 +661,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void CreateExperienceParticles()
     {
-        int expToDrop = config.experienceDrop;
+        int expToDrop = enemyConfig.experienceDrop;
         int particleCount = Mathf.Min(3, expToDrop / 5 + 1);
         int expPerParticle = expToDrop / particleCount;
         int remainingExp = expToDrop % particleCount;
@@ -623,7 +673,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             ExperienceParticle.CreateExperienceParticle(particlePosition, thisParticleExp);
         }
 
-        Debug.Log($"Enemy {config.enemyName}: Created {particleCount} experience particles with total exp={expToDrop}");
+        Debug.Log($"Enemy {enemyConfig.enemyName}: Created {particleCount} experience particles with total exp={expToDrop}");
     }
 
     private IEnumerator DeathAnimation()
@@ -632,10 +682,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         Vector3 originalScale = transform.localScale;
         Color originalColor = cachedRenderer.color;
 
-        while (timer < config.deathAnimationDuration)
+        while (timer < enemyConfig.deathAnimationDuration)
         {
             timer += Time.deltaTime;
-            float progress = timer / config.deathAnimationDuration;
+            float progress = timer / enemyConfig.deathAnimationDuration;
 
             transform.localScale = originalScale * (1f + progress);
 
@@ -657,7 +707,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         CreateExperienceParticles();
         PlayExplosionEffect();
         onReturnToPool?.Invoke();
-        Debug.Log($"Enemy {config.enemyName}: Exploded, dealing {config.explosionDamage} damage to player");
+        Debug.Log($"Enemy {enemyConfig.enemyName}: Exploded, dealing {enemyConfig.explosionDamage} damage to player");
     }
 
     private void PlayExplosionEffect()
@@ -675,18 +725,18 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         for (int i = 0; i < 5; i++)
         {
             transform.localScale = originalScale * (1f + i * 0.2f);
-            cachedRenderer.color = i % 2 == 0 ? Color.white : config.enemyColor;
+            cachedRenderer.color = i % 2 == 0 ? Color.white : enemyConfig.enemyColor;
             yield return new WaitForSeconds(0.05f);
         }
     }
 
     public void ResetState()
     {
-        if (config == null) return;
+        if (enemyConfig == null) return;
 
-        currentHealth = config.maxHealth;
-        currentShieldHealth = config.hasShield ? config.shieldHealth : 0f;
-        moveSpeed = config.moveSpeed;
+        currentHealth = enemyConfig.maxHealth;
+        currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
+        moveSpeed = enemyConfig.moveSpeed;
         hasExploded = false;
         isRetreating = false;
         attackTimer = 0f;
@@ -697,11 +747,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
         transform.position = Vector3.zero;
         transform.rotation = Quaternion.identity;
-        transform.localScale = Vector3.one * config.scale;
+        transform.localScale = Vector3.one * enemyConfig.scale;
 
         if (cachedRenderer != null)
         {
-            cachedRenderer.color = config.enemyColor;
+            cachedRenderer.color = enemyConfig.enemyColor;
         }
 
         if (cachedRigidbody != null)
@@ -713,7 +763,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         gameObject.SetActive(false);
         onReturnToPool = null;
 
-        Debug.Log($"Enemy {config.enemyName}: State reset complete");
+        Debug.Log($"Enemy {enemyConfig.enemyName}: State reset complete");
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -721,15 +771,15 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         if (!isInitialized || hasExploded)
             return;
 
-        Debug.Log($"Enemy {config.enemyName}: OnTriggerEnter2D with {other.gameObject.name} (tag: {other.tag})");
+        Debug.Log($"Enemy {enemyConfig.enemyName}: OnTriggerEnter2D with {other.gameObject.name} (tag: {other.tag})");
 
         var damageable = other.GetComponent<IDamageable>();
         if (damageable != null && damageable.GetTeam() == DamageTeam.Player && damageable.IsAlive())
         {
-            Debug.Log($"Enemy {config.enemyName}: Player collision! Exploding and dealing {config.explosionDamage} damage");
+            Debug.Log($"Enemy {enemyConfig.enemyName}: Player collision! Exploding and dealing {enemyConfig.explosionDamage} damage");
 
             var contactSource = new EnemyContactDamageSource(this);
-            damageable.TakeDamage(config.explosionDamage, contactSource);
+            damageable.TakeDamage(enemyConfig.explosionDamage, contactSource);
             Explode();
             return;
         }
@@ -737,14 +787,14 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         var bullet = other.GetComponent<Bullet>();
         if (bullet != null && bullet.GetOwner() == BulletOwner.Player)
         {
-            Debug.Log($"Enemy {config.enemyName}: Hit by player bullet, damage={bullet.GetDamage()}");
+            Debug.Log($"Enemy {enemyConfig.enemyName}: Hit by player bullet, damage={bullet.GetDamage()}");
             TakeDamage(bullet.GetDamage());
             return;
         }
 
         if (other.CompareTag("PlayerBullet"))
         {
-            Debug.Log($"Enemy {config.enemyName}: Hit by tagged player bullet, damage=10");
+            Debug.Log($"Enemy {enemyConfig.enemyName}: Hit by tagged player bullet, damage=10");
             TakeDamage(10f);
             Destroy(other.gameObject);
         }
@@ -758,10 +808,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         var damageable = collision.gameObject.GetComponent<IDamageable>();
         if (damageable != null && damageable.GetTeam() == DamageTeam.Player && damageable.IsAlive())
         {
-            Debug.Log($"Enemy {config.enemyName}: Physical collision with player! Exploding and dealing {config.explosionDamage} damage");
+            Debug.Log($"Enemy {enemyConfig.enemyName}: Physical collision with player! Exploding and dealing {enemyConfig.explosionDamage} damage");
 
             var contactSource = new EnemyContactDamageSource(this);
-            damageable.TakeDamage(config.explosionDamage, contactSource);
+            damageable.TakeDamage(enemyConfig.explosionDamage, contactSource);
             Explode();
         }
     }
@@ -769,7 +819,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     private void OnDisable()
     {
         hasExploded = false;
-        Debug.Log($"Enemy {config.enemyName}: Disabled");
+        Debug.Log($"Enemy {enemyConfig?.enemyName ?? gameObject.name}: Disabled");
     }
 
     private void OnDestroy()
@@ -779,47 +829,63 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             Destroy(cachedRenderer.sprite.texture);
             Destroy(cachedRenderer.sprite);
         }
-        Debug.Log($"Enemy {config.enemyName}: Destroyed");
+        Debug.Log($"Enemy {enemyConfig?.enemyName ?? gameObject.name}: Destroyed");
         onReturnToPool = null;
     }
 
-    // Интерфейсные методы IEnemy
+    // Interface methods
     public float GetCurrentHealth() => currentHealth;
-    public float GetMaxHealth() => config?.maxHealth ?? 100f;
+    public float GetMaxHealth() => enemyConfig?.maxHealth ?? 100f;
     public float GetCurrentShieldHealth() => currentShieldHealth;
     public float GetMoveSpeed() => moveSpeed;
-    public float GetCollisionDamage() => config?.collisionDamage ?? 10f;
-    public float GetExplosionDamage() => config?.explosionDamage ?? 20f;
+    public float GetCollisionDamage() => enemyConfig?.collisionDamage ?? 10f;
+    public float GetExplosionDamage() => enemyConfig?.explosionDamage ?? 20f;
     public bool IsAlive() => currentHealth > 0 && !hasExploded;
     public bool IsInitialized() => isInitialized;
     public bool IsRetreating() => isRetreating;
-    public EnemyConfig GetConfig() => config;
+    public EnemyConfig GetConfig() => enemyConfig;
+
+    // Public methods for external access
+    public void SetEnemyConfig(EnemyConfig config)
+    {
+        enemyConfig = config;
+    }
+
+    public string GetEnemyInfo()
+    {
+        if (enemyConfig == null) return "No config assigned";
+
+        return $"=== Enemy {enemyConfig.enemyName} Info ===\n" +
+               $"ID: {enemyConfig.enemyId}\n" +
+               $"Tier: {enemyConfig.tier}\n" +
+               $"Health: {currentHealth:F1}/{enemyConfig.maxHealth}\n" +
+               $"Shield: {currentShieldHealth:F1}\n" +
+               $"Move Speed: {moveSpeed}\n" +
+               $"Attack Type: {enemyConfig.attackType}\n" +
+               $"Movement Type: {enemyConfig.movementType}\n" +
+               $"Difficulty: {enemyConfig.difficultyValue}\n" +
+               $"Is Retreating: {isRetreating}\n" +
+               $"Initialized: {isInitialized}\n" +
+               $"Has Exploded: {hasExploded}\n" +
+               $"Alive: {IsAlive()}";
+    }
+
+    [ContextMenu("Show Enemy Info")]
+    private void DebugShowInfo()
+    {
+        Debug.Log(GetEnemyInfo());
+    }
 
     [ContextMenu("Take Damage (10)")]
     private void DebugTakeDamage() => TakeDamage(10f);
 
     [ContextMenu("Kill Enemy")]
-    private void DebugKillEnemy() { currentHealth = 0; Die(); }
+    private void DebugKillEnemy()
+    {
+        currentHealth = 0;
+        Die();
+    }
 
     [ContextMenu("Trigger Explosion")]
     private void DebugTriggerExplosion() => Explode();
-
-    [ContextMenu("Show Enemy Info")]
-    private void DebugShowInfo()
-    {
-        Debug.Log($"=== Enemy {config?.enemyName ?? gameObject.name} Info ===");
-        Debug.Log($"Health: {currentHealth}/{GetMaxHealth()}");
-        Debug.Log($"Shield: {currentShieldHealth}");
-        Debug.Log($"Move Speed: {moveSpeed}");
-        Debug.Log($"Attack Type: {config?.attackType}");
-        Debug.Log($"Movement Type: {config?.movementType}");
-        Debug.Log($"Is Retreating: {isRetreating}");
-        Debug.Log($"Initialized: {isInitialized}");
-        Debug.Log($"Has Exploded: {hasExploded}");
-        Debug.Log($"Alive: {IsAlive()}");
-        Debug.Log($"Experience Drop: {config?.experienceDrop ?? 0}");
-        Debug.Log($"==================");
-    }
 }
-
- 

@@ -1,0 +1,96 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1042487d1d177724aa197a4e74fb55b5, type: 3}
+  m_Name: WaveConfiguration
+  m_EditorClassIdentifier: 
+  baseEnemyCount: 5
+  enemyCountGrowthRate: 0.15
+  waveDuration: 30
+  spawnInterval: 1.5
+  spawnIntervalDecreaseRate: 0.02
+  minSpawnInterval: 0.3
+  difficultyProgression:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0.09
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 100
+      value: 10
+      inSlope: 0.09
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  baseDifficultyPoints: 10
+  difficultyGrowthRate: 1.2
+  tierDistributions:
+  - waveRange: {x: 1, y: 5}
+    weights:
+      tier1Weight: 1
+      tier2Weight: 0
+      tier3Weight: 0
+      tier4Weight: 0
+      tier5Weight: 0
+  - waveRange: {x: 6, y: 10}
+    weights:
+      tier1Weight: 0.7
+      tier2Weight: 0.3
+      tier3Weight: 0
+      tier4Weight: 0
+      tier5Weight: 0
+  - waveRange: {x: 11, y: 20}
+    weights:
+      tier1Weight: 0.5
+      tier2Weight: 0.4
+      tier3Weight: 0.1
+      tier4Weight: 0
+      tier5Weight: 0
+  - waveRange: {x: 21, y: 30}
+    weights:
+      tier1Weight: 0.3
+      tier2Weight: 0.4
+      tier3Weight: 0.25
+      tier4Weight: 0.05
+      tier5Weight: 0
+  - waveRange: {x: 31, y: 50}
+    weights:
+      tier1Weight: 0.2
+      tier2Weight: 0.3
+      tier3Weight: 0.35
+      tier4Weight: 0.15
+      tier5Weight: 0
+  - waveRange: {x: 51, y: 100}
+    weights:
+      tier1Weight: 0.1
+      tier2Weight: 0.2
+      tier3Weight: 0.4
+      tier4Weight: 0.25
+      tier5Weight: 0.05
+  - waveRange: {x: 101, y: 2147483647}
+    weights:
+      tier1Weight: 0.05
+      tier2Weight: 0.15
+      tier3Weight: 0.35
+      tier4Weight: 0.35
+      tier5Weight: 0.1

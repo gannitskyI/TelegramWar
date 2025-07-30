@@ -9,11 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 570d7c836fb2c374089c0d093e60161c, type: 3}
-  m_Name: Enemy_tankConfig
+  m_Script: {fileID: 11500000, guid: 6d99e7ed6f6436a4aa7f6faa1f07c79f, type: 3}
+  m_Name: EnemyDatabase
   m_EditorClassIdentifier: 
-  maxHealth: 200
-  moveSpeed: 1
-  collisionDamage: 10
-  explosionDamage: 20
-  experienceDrop: 20
+  allEnemies: []

@@ -215,6 +215,14 @@ public class GameplayUIController : BaseUIController
         SetText(WAVE_TEXT, $"Wave: {wave}");
     }
 
+    public void UpdateWaveInfo(WaveData waveData)
+    {
+        if (waveData == null) return;
+
+        var waveInfoText = $"Wave {waveData.waveNumber}\nEnemies: {waveData.enemyCount}\nDifficulty: {waveData.difficultyPoints:F0}";
+        SetText(WAVE_TEXT, waveInfoText);
+    }
+
     protected override void HandleButtonClick(string buttonName)
     {
         if (buttonName == PAUSE_BUTTON)
@@ -289,5 +297,12 @@ public class GameplayUIController : BaseUIController
     public int GetCurrentLevel() => currentLevel;
     public int GetCurrentExperience() => currentExperience;
     public float GetCurrentHealth() => currentHealth;
-    private int GetCurrentWave() => 1; // Placeholder implementation
+    private int GetCurrentWave()
+    {
+        if (cachedSpawnSystem != null)
+        {
+            return cachedSpawnSystem.GetCurrentWave();
+        }
+        return 1;
+    }
 }

@@ -7,19 +7,17 @@ public class SpawnSystem : IInitializable, IUpdatable
     public int InitializationOrder => 20;
 
     private EnemyFactory enemyFactory;
+    private WaveGenerator waveGenerator;
     private bool isSpawning;
-    private float spawnTimer;
     private int currentWave = 1;
-    private int enemiesSpawnedThisWave = 0;
-    private int enemiesToSpawnThisWave = 3;
-    private float spawnInterval = 2f;
-    private float waveTimer = 0f;
-    private float waveDuration = 30f;
-    private bool waveInProgress = false;
-
-    private SystemsConfiguration config;
-    private readonly string[] availableEnemyTypes = { "weak", "normal", "strong", "fast", "tank" };
+    private WaveData currentWaveData;
+    private readonly Queue<EnemySpawnData> pendingSpawns = new Queue<EnemySpawnData>();
     private readonly HashSet<GameObject> activeEnemies = new HashSet<GameObject>();
+
+    private float waveTimer;
+    private float spawnTimer;
+    private bool waveInProgress;
+    private bool isInitialized;
 
     private Camera mainCamera;
     private Vector3 bottomLeft;
@@ -27,30 +25,92 @@ public class SpawnSystem : IInitializable, IUpdatable
     private float screenBoundaryOffset = 2f;
     private bool boundsCalculated = false;
 
+    private WaveConfiguration waveConfig;
+    private EnemyDatabase enemyDatabase;
+
     public IEnumerator Initialize()
     {
-        config = ServiceLocator.Get<SystemsConfiguration>();
-        if (config != null)
-        {
-            spawnInterval = config.spawnInterval;
-            enemiesToSpawnThisWave = config.enemiesPerWave;
-            waveDuration = config.roundDuration;
-        }
-        else
-        {
-            waveDuration = 30f;
-        }
+        var config = ServiceLocator.Get<SystemsConfiguration>();
+
+        LoadConfigurations();
 
         var addressableManager = ServiceLocator.Get<AddressableManager>();
         if (addressableManager != null)
         {
-            enemyFactory = new EnemyFactory(addressableManager);
+            enemyFactory = new EnemyFactory(addressableManager, enemyDatabase);
             yield return CoroutineRunner.Instance.StartCoroutine(WarmupPoolsCoroutine());
+        }
+
+        if (waveConfig != null && enemyDatabase != null)
+        {
+            waveGenerator = new WaveGenerator(waveConfig, enemyDatabase);
+        }
+        else
+        {
+            Debug.LogError("SpawnSystem: Wave configuration or enemy database not found!");
+            CreateFallbackConfiguration();
         }
 
         mainCamera = Camera.main;
         CalculateScreenBounds();
+        isInitialized = true;
+
         yield return null;
+    }
+
+    private void LoadConfigurations()
+    {
+        waveConfig = Resources.Load<WaveConfiguration>("WaveConfiguration");
+        if (waveConfig == null)
+        {
+            Debug.LogWarning("WaveConfiguration not found in Resources, creating default");
+        }
+
+        enemyDatabase = Resources.Load<EnemyDatabase>("EnemyDatabase");
+        if (enemyDatabase == null)
+        {
+            Debug.LogWarning("EnemyDatabase not found in Resources, creating default");
+        }
+    }
+
+    private void CreateFallbackConfiguration()
+    {
+        if (waveConfig == null)
+        {
+            waveConfig = ScriptableObject.CreateInstance<WaveConfiguration>();
+        }
+
+        if (enemyDatabase == null)
+        {
+            enemyDatabase = ScriptableObject.CreateInstance<EnemyDatabase>();
+            enemyDatabase.allEnemies = CreateFallbackEnemies();
+        }
+
+        waveGenerator = new WaveGenerator(waveConfig, enemyDatabase);
+    }
+
+    private List<EnemyConfig> CreateFallbackEnemies()
+    {
+        var enemies = new List<EnemyConfig>();
+
+        // Create only one basic fallback enemy for emergency cases
+        var basicEnemy = ScriptableObject.CreateInstance<EnemyConfig>();
+        basicEnemy.enemyId = "fallback_basic";
+        basicEnemy.enemyName = "Fallback Enemy";
+        basicEnemy.tier = EnemyTier.Tier1;
+        basicEnemy.difficultyValue = 1f;
+        basicEnemy.maxHealth = 50f;
+        basicEnemy.moveSpeed = 3f;
+        basicEnemy.attackType = EnemyAttackType.None;
+        basicEnemy.movementType = EnemyMovementType.DirectChase;
+        basicEnemy.collisionDamage = 10f;
+        basicEnemy.explosionDamage = 15f;
+        basicEnemy.experienceDrop = 5;
+        basicEnemy.enemyColor = Color.gray;
+        enemies.Add(basicEnemy);
+
+        Debug.LogWarning("Using fallback enemy configuration! Please assign proper EnemyConfig assets to EnemyDatabase.");
+        return enemies;
     }
 
     private void CalculateScreenBounds()
@@ -75,96 +135,104 @@ public class SpawnSystem : IInitializable, IUpdatable
 
     public void StartSpawning()
     {
-        isSpawning = true;
-        waveInProgress = true;
-        spawnTimer = 0f;
-        waveTimer = 0f;
-        currentWave = 1;
-        enemiesSpawnedThisWave = 0;
-        activeEnemies.Clear();
-
-        if (config != null)
+        if (!isInitialized)
         {
-            enemiesToSpawnThisWave = config.enemiesPerWave;
-            spawnInterval = config.spawnInterval;
+            Debug.LogError("SpawnSystem not initialized!");
+            return;
         }
 
+        isSpawning = true;
+        currentWave = 1;
+        StartNewWave();
+    }
+
+    private void StartNewWave()
+    {
+        if (waveGenerator == null)
+        {
+            Debug.LogError("WaveGenerator not available!");
+            return;
+        }
+
+        currentWaveData = waveGenerator.GenerateWave(currentWave);
+        Debug.Log(currentWaveData.GetWaveInfo());
+
+        pendingSpawns.Clear();
+        foreach (var spawnData in currentWaveData.enemyComposition)
+        {
+            pendingSpawns.Enqueue(spawnData);
+        }
+
+        waveTimer = 0f;
+        spawnTimer = 0f;
+        waveInProgress = true;
+        activeEnemies.Clear();
+
         NotifyUIWaveStarted();
-        spawnTimer = spawnInterval;
     }
 
     public void StopSpawning()
     {
         isSpawning = false;
         waveInProgress = false;
+        pendingSpawns.Clear();
     }
 
     public void OnUpdate(float deltaTime)
     {
-        if (!isSpawning || !waveInProgress) return;
+        if (!isSpawning || !waveInProgress || !isInitialized) return;
 
         activeEnemies.RemoveWhere(enemy => enemy == null);
 
-        spawnTimer += deltaTime;
         waveTimer += deltaTime;
+        spawnTimer += deltaTime;
 
-        if (spawnTimer >= spawnInterval && enemiesSpawnedThisWave < enemiesToSpawnThisWave)
-        {
-            SpawnEnemy();
-            spawnTimer = 0f;
-        }
-
+        ProcessPendingSpawns();
         CheckWaveCompletion();
+    }
+
+    private void ProcessPendingSpawns()
+    {
+        if (pendingSpawns.Count == 0) return;
+
+        var nextSpawn = pendingSpawns.Peek();
+        var waveProgress = waveTimer / currentWaveData.duration;
+
+        if (waveProgress >= nextSpawn.spawnDelay)
+        {
+            pendingSpawns.Dequeue();
+            SpawnEnemy(nextSpawn.enemyConfig);
+        }
     }
 
     private void CheckWaveCompletion()
     {
-        bool timeExpired = waveTimer >= waveDuration; // Изменено для отсчета вперед
-        bool allEnemiesSpawned = enemiesSpawnedThisWave >= enemiesToSpawnThisWave;
+        bool allEnemiesSpawned = pendingSpawns.Count == 0;
         bool noActiveEnemies = activeEnemies.Count == 0;
+        bool timeExpired = waveTimer >= currentWaveData.duration;
 
-        if (timeExpired || (allEnemiesSpawned && noActiveEnemies))
+        if (allEnemiesSpawned && (noActiveEnemies || timeExpired))
         {
-            StartNextWave();
+            currentWave++;
+            StartNewWave();
         }
     }
 
-    private void SpawnEnemy()
+    private async void SpawnEnemy(EnemyConfig enemyConfig)
     {
-        if (enemyFactory == null) return;
+        if (enemyFactory == null || enemyConfig == null) return;
 
-        string enemyType = GetRandomEnemyTypeOptimized();
-        Vector3 spawnPosition = GetRandomSpawnPositionOptimized();
-        _ = SpawnEnemyAsync(enemyType, spawnPosition);
-        enemiesSpawnedThisWave++;
-    }
+        Vector3 spawnPosition = GetRandomSpawnPosition();
+        var enemy = await enemyFactory.CreateEnemy(enemyConfig.enemyId, spawnPosition);
 
-    private string GetRandomEnemyTypeOptimized()
-    {
-        if (currentWave <= 2)
+        if (enemy != null)
         {
-            return Random.Range(0, 100) < 80 ? "weak" : "normal";
-        }
-        else if (currentWave <= 5)
-        {
-            int rand = Random.Range(0, 100);
-            if (rand < 40) return "weak";
-            if (rand < 70) return "normal";
-            if (rand < 90) return "fast";
-            return "strong";
-        }
-        else
-        {
-            int rand = Random.Range(0, 100);
-            if (rand < 20) return "normal";
-            if (rand < 40) return "strong";
-            if (rand < 60) return "fast";
-            if (rand < 80) return "tank";
-            return "strong";
+            activeEnemies.Add(enemy);
+            NotifyEnemySpawned(enemy);
         }
     }
 
-    private Vector3 GetRandomSpawnPositionOptimized()
+    private Vector3 GetRandomSpawnPosition()
     {
         if (!boundsCalculated)
         {
@@ -205,62 +273,26 @@ public class SpawnSystem : IInitializable, IUpdatable
         return spawnPosition;
     }
 
-    private async System.Threading.Tasks.Task SpawnEnemyAsync(string enemyType, Vector3 position)
-    {
-        try
-        {
-            var enemy = await enemyFactory.CreateEnemy(enemyType, position);
-            if (enemy != null)
-            {
-                activeEnemies.Add(enemy);
-                NotifyEnemySpawned(enemy);
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error spawning enemy: {e.Message}");
-        }
-    }
-
-    private void StartNextWave()
-    {
-        currentWave++;
-        enemiesSpawnedThisWave = 0;
-        waveTimer = 0f;
-        activeEnemies.Clear();
-
-        if (config != null)
-        {
-            enemiesToSpawnThisWave = Mathf.RoundToInt(config.enemiesPerWave * (1 + currentWave * config.difficultyIncreaseRate));
-            spawnInterval = Mathf.Max(0.5f, config.spawnInterval * (1 - currentWave * 0.05f));
-        }
-        else
-        {
-            enemiesToSpawnThisWave += 2;
-            spawnInterval = Mathf.Max(0.5f, spawnInterval - 0.1f);
-        }
-
-        NotifyUIWaveStarted();
-        CoroutineRunner.StartRoutine(WaveTransitionDelay());
-    }
-
-    private IEnumerator WaveTransitionDelay()
-    {
-        yield return new WaitForSeconds(2f);
-        spawnTimer = spawnInterval;
-    }
-
     private void NotifyUIWaveStarted()
     {
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
             var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
-            gameplayUI?.UpdateWave(currentWave);
+            if (gameplayUI != null)
+            {
+                gameplayUI.UpdateWave(currentWave);
+
+                if (currentWaveData != null)
+                {
+                    gameplayUI.UpdateWaveInfo(currentWaveData);
+                }
+            }
         }
     }
 
     private void NotifyEnemySpawned(GameObject enemy)
     {
+        Debug.Log($"Enemy spawned: {enemy.name} at {enemy.transform.position}");
     }
 
     public void Cleanup()
@@ -268,14 +300,14 @@ public class SpawnSystem : IInitializable, IUpdatable
         StopSpawning();
         ClearAllEnemies();
 
-        if (enemyFactory != null)
-        {
-            enemyFactory.Cleanup();
-            enemyFactory = null;
-        }
+        enemyFactory?.Cleanup();
+        enemyFactory = null;
+        waveGenerator = null;
 
         activeEnemies.Clear();
+        pendingSpawns.Clear();
         boundsCalculated = false;
+        isInitialized = false;
     }
 
     private void ClearAllEnemies()
@@ -285,17 +317,59 @@ public class SpawnSystem : IInitializable, IUpdatable
         {
             if (enemy != null)
             {
-                UnityEngine.Object.Destroy(enemy);
+                Object.Destroy(enemy);
             }
         }
         activeEnemies.Clear();
     }
 
     public int GetCurrentWave() => currentWave;
-    public int GetEnemiesSpawnedThisWave() => enemiesSpawnedThisWave;
-    public int GetEnemiesToSpawnThisWave() => enemiesToSpawnThisWave;
     public bool IsSpawning() => isSpawning;
-    public float GetWaveTimeRemaining() => waveTimer;  
+    public float GetWaveProgress() => currentWaveData != null ? waveTimer / currentWaveData.duration : 0f;
     public int GetActiveEnemiesCount() => activeEnemies.Count;
     public bool IsWaveInProgress() => waveInProgress;
+    public int GetPendingSpawnsCount() => pendingSpawns.Count;
+    public float GetCurrentWaveDifficulty() => currentWaveData?.difficultyPoints ?? 0f;
+
+    public string GetCurrentWaveInfo()
+    {
+        if (currentWaveData == null) return "No active wave";
+
+        var info = $"Wave {currentWave}\n";
+        info += $"Progress: {GetWaveProgress():P1}\n";
+        info += $"Active Enemies: {GetActiveEnemiesCount()}\n";
+        info += $"Pending Spawns: {GetPendingSpawnsCount()}\n";
+        info += $"Difficulty: {GetCurrentWaveDifficulty():F1}";
+
+        return info;
+    }
+
+    public WaveData GetCurrentWaveData() => currentWaveData;
+
+    public TierWeights GetCurrentTierWeights()
+    {
+        return waveConfig?.GetTierWeights(currentWave) ?? new TierWeights(1f, 0f, 0f, 0f, 0f);
+    }
+
+    [ContextMenu("Force Next Wave")]
+    public void ForceNextWave()
+    {
+        if (Application.isPlaying && isSpawning)
+        {
+            pendingSpawns.Clear();
+            ClearAllEnemies();
+            currentWave++;
+            StartNewWave();
+        }
+    }
+
+    [ContextMenu("Show Current Wave Info")]
+    public void ShowCurrentWaveInfo()
+    {
+        Debug.Log(GetCurrentWaveInfo());
+        if (currentWaveData != null)
+        {
+            Debug.Log(currentWaveData.GetWaveInfo());
+        }
+    }
 }
