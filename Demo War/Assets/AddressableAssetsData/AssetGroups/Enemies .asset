@@ -14,37 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_GroupName: 'Enemies '
   m_GUID: 222f7baaf48abb94b91d7c38d2e3a652
-  m_SerializeEntries:
-  - m_GUID: 12d424f54706e7c4baa6cca9ecf0142a
-    m_Address: Enemy_strong
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 1eadf3a3b8bb5cb4f85a0692ab8bf3a7
-    m_Address: Enemy_weak
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 8458f5d2a24ed8a499540f4da9ac5214
-    m_Address: Enemy_tank
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 8a476511c0d9963488d26269fc0e2feb
-    m_Address: Enemy_fast
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 95c4db2f8e9e2af4a95ca12c4af4df6c
-    m_Address: Enemy_tankConfig
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: eaa5a99a801545c41b9e9a2b0c93cc8f
-    m_Address: Enemy_normal
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
+  m_SerializeEntries: []
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 1e16e69b683d66548835fcd678670a6b, type: 2}
   m_SchemaSet:

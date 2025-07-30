@@ -12,4 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d99e7ed6f6436a4aa7f6faa1f07c79f, type: 3}
   m_Name: EnemyDatabase
   m_EditorClassIdentifier: 
-  allEnemies: []
+  allEnemies:
+  - {fileID: 11400000, guid: 5bfebd4a72a5c6a47825e532c2784286, type: 2}
+  - {fileID: 11400000, guid: 4669408652434a145abfad2acf9dd14b, type: 2}
+  - {fileID: 11400000, guid: deb762f14cc3345469bdb7c3c3c7da0c, type: 2}
+  - {fileID: 11400000, guid: 503d6784207928342bc1f8a6e14d4db4, type: 2}
+  - {fileID: 11400000, guid: b056e2c1fc64ff743a9a3cba9b54da2c, type: 2}
+  - {fileID: 11400000, guid: e09f82d47db7db64297071a721d6fc04, type: 2}
+  - {fileID: 11400000, guid: 78ae32eaecc61a8439fcc139a4f71b04, type: 2}
+  - {fileID: 11400000, guid: 9ae03e7e5b2f10f488032f7193436cb5, type: 2}

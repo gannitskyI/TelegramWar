@@ -70,24 +70,36 @@ public class ScoreSystem : IInitializable
 
     private void TriggerUpgradeSelection()
     {
-        Debug.Log("Triggering upgrade selection");
+        Debug.Log("Triggering upgrade selection - using pause manager (NO STATE CHANGES)");
 
-        var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        if (stateMachine != null)
+        if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
-            stateMachine.ChangeState(new UpgradeSelectionState());
+            var upgradeOptions = upgradeSystem.GenerateUpgradeOptions(3);
+            GamePauseManager.Instance.ShowUpgradeSelection(upgradeOptions);
         }
         else
         {
-            Debug.LogError("GameStateMachine not found! Cannot trigger upgrade selection.");
+            Debug.LogError("UpgradeSystem not found! Cannot generate upgrade options.");
+            var fallbackUpgrades = CreateFallbackUpgrades();
+            GamePauseManager.Instance.ShowUpgradeSelection(fallbackUpgrades);
         }
+    }
+
+    private System.Collections.Generic.List<Upgrade> CreateFallbackUpgrades()
+    {
+        return new System.Collections.Generic.List<Upgrade>
+        {
+            new Upgrade("damage_boost", "Damage Boost", "+20% damage", UpgradeType.Damage, 0.2f),
+            new Upgrade("attack_speed", "Attack Speed", "+25% attack speed", UpgradeType.AttackSpeed, 0.25f),
+            new Upgrade("health_boost", "Health Boost", "+30% max health", UpgradeType.Health, 0.3f)
+        };
     }
 
     private void NotifyUIScoreChanged()
     {
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
-            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI"); // Изменено с "GameplayUI" на "GameUI"
+            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
             if (gameplayUI != null)
             {
                 gameplayUI.UpdateScore(currentScore);
@@ -99,7 +111,7 @@ public class ScoreSystem : IInitializable
     {
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
-            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI"); // Изменено с "GameplayUI" на "GameUI"
+            var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
             if (gameplayUI != null)
             {
                 gameplayUI.ShowLevelUpNotification();

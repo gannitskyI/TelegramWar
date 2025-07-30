@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   baseEnemyCount: 5
   enemyCountGrowthRate: 0.15
-  waveDuration: 30
+  waveDuration: 10
   spawnInterval: 1.5
   spawnIntervalDecreaseRate: 0.02
   minSpawnInterval: 0.3

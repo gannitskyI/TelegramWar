@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public class GameplayState : GameState
+public class GameplayState : PausableGameState
 {
     private float gameTimer;
     private bool isRoundActive;
@@ -14,10 +14,28 @@ public class GameplayState : GameState
 
     public override IEnumerator Enter()
     {
+        Debug.Log($"GameplayState Enter - wasInitialized: {wasInitialized}, isPaused: {isPaused}");
+
+        if (wasInitialized)
+        {
+            Debug.Log("Resuming existing gameplay - no recreation");
+            Resume();
+
+            var uiSystem = ServiceLocator.Get<UISystem>();
+            if (uiSystem != null && gameplayUIController != null)
+            {
+                if (!uiSystem.IsUIActive(GAMEPLAY_UI_ID))
+                {
+                    uiSystem.ShowUI(GAMEPLAY_UI_ID);
+                }
+            }
+            yield break;
+        }
+
+        Debug.Log("First time initialization of gameplay state");
         isExiting = false;
         playerCreated = false;
-
-        gameTimer = 0f; // Инициализируем время с 0, отсчет идет вперед
+        gameTimer = 0f;
         isRoundActive = true;
 
         yield return SetupGameplayUI();
@@ -36,8 +54,45 @@ public class GameplayState : GameState
         }
 
         playerCreated = true;
+        wasInitialized = true;
         ActivateGameplaySystems();
         EnableGameplayInput();
+
+        Debug.Log("GameplayState fully initialized");
+    }
+
+    protected override void OnPause()
+    {
+        Debug.Log("GameplayState paused - stopping systems but keeping objects");
+
+        if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
+        {
+            spawnSystem.StopSpawning();
+        }
+
+        if (ServiceLocator.TryGet<InputReader>(out var inputReader))
+        {
+            inputReader.DisableAllInput();
+        }
+
+        Time.timeScale = 0f;
+    }
+
+    protected override void OnResume()
+    {
+        Debug.Log("GameplayState resumed - restarting systems with existing objects");
+
+        if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
+        {
+            spawnSystem.StartSpawning();
+        }
+
+        if (ServiceLocator.TryGet<InputReader>(out var inputReader))
+        {
+            inputReader.EnableGameplayInput();
+        }
+
+        Time.timeScale = 1f;
     }
 
     private IEnumerator SetupGameplayUI()
@@ -54,11 +109,19 @@ public class GameplayState : GameState
             uiSystem.HideUI("MainMenu");
         }
 
-        gameplayUIController = new GameplayUIController();
-        uiSystem.RegisterUIController(GAMEPLAY_UI_ID, gameplayUIController);
+        if (gameplayUIController == null)
+        {
+            gameplayUIController = new GameplayUIController();
+            uiSystem.RegisterUIController(GAMEPLAY_UI_ID, gameplayUIController);
+        }
 
         yield return new WaitForSeconds(0.2f);
-        uiSystem.ShowUI(GAMEPLAY_UI_ID);
+
+        if (!uiSystem.IsUIActive(GAMEPLAY_UI_ID))
+        {
+            uiSystem.ShowUI(GAMEPLAY_UI_ID);
+        }
+
         yield return new WaitForSeconds(0.1f);
     }
 
@@ -89,14 +152,15 @@ public class GameplayState : GameState
 
     private IEnumerator CreatePlayer()
     {
-        Debug.Log("Starting player creation");
+        if (playerInstance != null)
+        {
+            Debug.Log("Player already exists, skipping creation");
+            yield break;
+        }
 
-        ClearExistingPlayers();
-        yield return null;
+        Debug.Log("Creating player for the first time");
 
         Vector3 spawnPosition = GetPlayerSpawnPosition();
-        Debug.Log($"Player spawn position: {spawnPosition}");
-
         var addressableManager = ServiceLocator.Get<AddressableManager>();
 
         if (addressableManager != null)
@@ -107,43 +171,15 @@ public class GameplayState : GameState
             if (playerTask.Result != null)
             {
                 playerInstance = playerTask.Result;
-                Debug.Log($"Player created from PlayerPrefab: {playerInstance.name}");
+                Debug.Log($"Player created: {playerInstance.name}");
 
                 SetupPlayerComponents();
                 RegisterPlayer();
                 yield break;
             }
-            else
-            {
-                Debug.LogError("PlayerPrefab failed to instantiate!");
-            }
-        }
-        else
-        {
-            Debug.LogError("AddressableManager is null!");
         }
 
-        Debug.LogError("Failed to create player - game cannot continue");
-    }
-
-    private void ClearExistingPlayers()
-    {
-        var existingPlayers = GameObject.FindGameObjectsWithTag("Player");
-        foreach (var existingPlayer in existingPlayers)
-        {
-            Debug.LogWarning($"Destroying existing player: {existingPlayer.name}");
-            Object.Destroy(existingPlayer);
-        }
-
-        var fallbackPlayers = GameObject.FindObjectsOfType<GameObject>();
-        foreach (var obj in fallbackPlayers)
-        {
-            if (obj.name.Contains("FallbackPlayer"))
-            {
-                Debug.LogWarning($"Destroying fallback player: {obj.name}");
-                Object.Destroy(obj);
-            }
-        }
+        Debug.LogError("Failed to create player");
     }
 
     private Vector3 GetPlayerSpawnPosition()
@@ -155,15 +191,12 @@ public class GameplayState : GameState
             Vector3 worldCenter = camera.ScreenToWorldPoint(screenCenter);
             return new Vector3(worldCenter.x, worldCenter.y, 0f);
         }
-
         return Vector3.zero;
     }
 
     private void SetupPlayerComponents()
     {
         if (playerInstance == null) return;
-
-        Debug.Log($"Setting up components for player: {playerInstance.name}");
 
         var rb3d = playerInstance.GetComponent<Rigidbody>();
         if (rb3d != null)
@@ -203,14 +236,10 @@ public class GameplayState : GameState
 
     private IEnumerator SafeInitializeComponent(IInitializable component, string componentName)
     {
-        if (component == null)
-        {
-            Debug.LogWarning($"Component {componentName} is null");
-            yield break;
-        }
+        if (component == null) yield break;
 
         yield return component.Initialize();
-        Debug.Log($"Component {componentName} initialized successfully");
+        Debug.Log($"Component {componentName} initialized");
     }
 
     private void RegisterPlayer()
@@ -220,7 +249,7 @@ public class GameplayState : GameState
             ServiceLocator.Unregister<GameObject>();
             ServiceLocator.Register<GameObject>(playerInstance);
             ServiceLocator.RegisterWeak<GameObject>(playerInstance);
-            Debug.Log($"Player registered in ServiceLocator: {playerInstance.name}");
+            Debug.Log($"Player registered: {playerInstance.name}");
         }
     }
 
@@ -244,7 +273,7 @@ public class GameplayState : GameState
 
     private void OnPlayerDied()
     {
-        if (isExiting) return;
+        if (isExiting || isPaused) return;
 
         Debug.Log("Player died event triggered");
         CoroutineRunner.StartRoutine(EndGameplayAfterDelay());
@@ -267,17 +296,17 @@ public class GameplayState : GameState
         }
     }
 
-    public override void Update()
+    protected override void OnUpdate()
     {
         if (!isRoundActive || isExiting || !playerCreated) return;
 
         if (playerInstance == null)
         {
-            Debug.LogError("Player instance is null during gameplay! This should not happen.");
+            Debug.LogError("Player instance is null during gameplay!");
             return;
         }
 
-        gameTimer += Time.deltaTime; // Время идет вперед
+        gameTimer += Time.deltaTime;
 
         if (gameplayUIController != null)
         {
@@ -287,9 +316,10 @@ public class GameplayState : GameState
 
     public override IEnumerator Exit()
     {
+        Debug.Log("GameplayState Exit called");
+
         isExiting = true;
         isRoundActive = false;
-        playerCreated = false;
 
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
@@ -340,7 +370,13 @@ public class GameplayState : GameState
 
         ServiceLocator.Unregister<GameObject>();
         gameplayUIController = null;
+        wasInitialized = false;
+        playerCreated = false;
 
         yield return null;
     }
+
+    public float GetGameTimer() => gameTimer;
+    public bool IsRoundActive() => isRoundActive && !isPaused;
+    public GameObject GetPlayerInstance() => playerInstance;
 }

@@ -8,10 +8,21 @@ public class UpgradeSelectionState : GameState
     private const string GAMEPLAY_UI_ID = "GameUI";
     private UpgradeSelectionUIController upgradeUIController;
     private List<Upgrade> currentUpgradeOptions;
+    private GameplayState gameplayState;
+
+    public UpgradeSelectionState(GameplayState currentGameplayState)
+    {
+        gameplayState = currentGameplayState;
+    }
 
     public override IEnumerator Enter()
     {
-        Debug.Log("Entering Upgrade Selection State");
+        Debug.Log("Entering Upgrade Selection State - PAUSE ONLY");
+
+        if (gameplayState != null)
+        {
+            gameplayState.Pause();
+        }
 
         var uiSystem = ServiceLocator.Get<UISystem>();
         if (uiSystem == null)
@@ -23,29 +34,20 @@ public class UpgradeSelectionState : GameState
         if (uiSystem.IsUIActive(GAMEPLAY_UI_ID))
         {
             uiSystem.HideUI(GAMEPLAY_UI_ID);
-            Debug.Log("Gameplay UI hidden");
-        }
-        else
-        {
-            Debug.Log("Gameplay UI was not active, skipping hide");
         }
 
         upgradeUIController = new UpgradeSelectionUIController();
         uiSystem.RegisterUIController(UPGRADE_UI_ID, upgradeUIController);
 
         GenerateUpgradeOptions();
-
         uiSystem.ShowUI(UPGRADE_UI_ID);
 
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.DisableAllInput();
-            Debug.Log("Game input disabled in upgrade selection");
         }
 
-        Time.timeScale = 0f;
-
-        Debug.Log("Upgrade Selection State entered successfully");
+        Debug.Log("Upgrade Selection State entered - game is paused");
         yield return null;
     }
 
@@ -54,11 +56,7 @@ public class UpgradeSelectionState : GameState
         if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
             currentUpgradeOptions = upgradeSystem.GenerateUpgradeOptions(3);
-
-            if (upgradeUIController != null)
-            {
-                upgradeUIController.SetUpgradeOptions(currentUpgradeOptions);
-            }
+            upgradeUIController?.SetUpgradeOptions(currentUpgradeOptions);
         }
         else
         {
@@ -76,10 +74,7 @@ public class UpgradeSelectionState : GameState
             new Upgrade("health_boost", "Health Boost", "+30% max health", UpgradeType.Health, 0.3f)
         };
 
-        if (upgradeUIController != null)
-        {
-            upgradeUIController.SetUpgradeOptions(currentUpgradeOptions);
-        }
+        upgradeUIController?.SetUpgradeOptions(currentUpgradeOptions);
     }
 
     public void SelectUpgrade(int upgradeIndex)
@@ -97,39 +92,9 @@ public class UpgradeSelectionState : GameState
         {
             upgradeSystem.SelectUpgrade(selectedUpgrade);
         }
-        else
-        {
-            ApplyUpgradeDirect(selectedUpgrade);
-        }
 
         WebGLHelper.TriggerHapticFeedback("medium");
-
         CoroutineRunner.StartRoutine(ReturnToGameplayAfterDelay(0.3f));
-    }
-
-    private void ApplyUpgradeDirect(Upgrade upgrade)
-    {
-        if (ServiceLocator.TryGet<GameObject>(out var player) && player != null)
-        {
-            var combat = player.GetComponent<PlayerCombat>();
-            if (combat != null)
-            {
-                switch (upgrade.type)
-                {
-                    case UpgradeType.Damage:
-                        combat.UpgradeDamage(1f + upgrade.value);
-                        break;
-                    case UpgradeType.AttackSpeed:
-                        combat.UpgradeAttackSpeed(1f + upgrade.value);
-                        break;
-                    case UpgradeType.AttackRange:
-                        combat.UpgradeRange(1f + upgrade.value);
-                        break;
-                }
-            }
-        }
-
-        Debug.Log($"Applied upgrade direct: {upgrade.name}");
     }
 
     private IEnumerator ReturnToGameplayAfterDelay(float delay)
@@ -137,20 +102,15 @@ public class UpgradeSelectionState : GameState
         yield return new WaitForSecondsRealtime(delay);
 
         var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        stateMachine?.ChangeState(new GameplayState());
+        if (stateMachine != null && gameplayState != null)
+        {
+            stateMachine.ChangeState(gameplayState);
+        }
     }
 
     public override IEnumerator Exit()
     {
-        Debug.Log("Exiting Upgrade Selection State");
-
-        Time.timeScale = 1f;
-
-        if (ServiceLocator.TryGet<InputReader>(out var inputReader))
-        {
-            inputReader.EnableGameplayInput();
-            Debug.Log("Game input enabled");
-        }
+        Debug.Log("Exiting Upgrade Selection State - RESUME GAME");
 
         var uiSystem = ServiceLocator.Get<UISystem>();
         if (uiSystem != null)
@@ -161,14 +121,23 @@ public class UpgradeSelectionState : GameState
             if (uiSystem.GetUIController<GameplayUIController>(GAMEPLAY_UI_ID) != null)
             {
                 uiSystem.ShowUI(GAMEPLAY_UI_ID);
-                Debug.Log("Gameplay UI restored");
             }
+        }
+
+        if (ServiceLocator.TryGet<InputReader>(out var inputReader))
+        {
+            inputReader.EnableGameplayInput();
+        }
+
+        if (gameplayState != null)
+        {
+            gameplayState.Resume();
         }
 
         upgradeUIController = null;
         currentUpgradeOptions = null;
 
-        Debug.Log("Upgrade Selection State exited successfully");
+        Debug.Log("Game resumed from upgrade selection");
         yield return null;
     }
 

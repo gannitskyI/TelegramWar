@@ -16,7 +16,8 @@ public class UpgradeSelectionUIController : BaseUIController
     private readonly string[] requiredTexts = { TITLE_TEXT, UPGRADE_TEXT_1, UPGRADE_TEXT_2, UPGRADE_TEXT_3 };
 
     private List<Upgrade> currentUpgrades;
-    private UpgradeSelectionState currentState;
+
+    public System.Action<int> OnUpgradeSelected;
 
     public UpgradeSelectionUIController() : base("UpgradeSelectionUI") { }
 
@@ -182,7 +183,6 @@ public class UpgradeSelectionUIController : BaseUIController
         }
 
         SetButtonInteractable(SKIP_BUTTON, true);
-        currentState = GetCurrentUpgradeState();
     }
 
     private void ShowLoadingState()
@@ -279,41 +279,13 @@ public class UpgradeSelectionUIController : BaseUIController
         if (currentUpgrades == null || upgradeIndex >= currentUpgrades.Count) return;
 
         DisableAllButtons();
-
-        if (currentState != null)
-        {
-            currentState.SelectUpgrade(upgradeIndex);
-        }
-        else
-        {
-            var stateMachine = ServiceLocator.Get<GameStateMachine>();
-            var upgradeSystem = ServiceLocator.Get<UpgradeSystem>();
-
-            if (upgradeSystem != null && stateMachine != null)
-            {
-                upgradeSystem.SelectUpgrade(currentUpgrades[upgradeIndex]);
-                stateMachine.ChangeState(new GameplayState());
-            }
-        }
+        OnUpgradeSelected?.Invoke(upgradeIndex);
     }
 
     private void SkipUpgrade()
     {
         DisableAllButtons();
-
-        var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        stateMachine?.ChangeState(new GameplayState());
-    }
-
-    private UpgradeSelectionState GetCurrentUpgradeState()
-    {
-        var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        if (stateMachine == null) return null;
-
-        var field = stateMachine.GetType().GetField("currentState",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-        return field?.GetValue(stateMachine) as UpgradeSelectionState;
+        GamePauseManager.Instance.ResumeGame();
     }
 
     private void DisableAllButtons()
@@ -367,6 +339,6 @@ public class UpgradeSelectionUIController : BaseUIController
     {
         base.OnCleanup();
         currentUpgrades = null;
-        currentState = null;
+        OnUpgradeSelected = null;
     }
 }

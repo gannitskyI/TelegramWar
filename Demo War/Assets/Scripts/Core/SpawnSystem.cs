@@ -93,7 +93,6 @@ public class SpawnSystem : IInitializable, IUpdatable
     {
         var enemies = new List<EnemyConfig>();
 
-        // Create only one basic fallback enemy for emergency cases
         var basicEnemy = ScriptableObject.CreateInstance<EnemyConfig>();
         basicEnemy.enemyId = "fallback_basic";
         basicEnemy.enemyName = "Fallback Enemy";
@@ -109,7 +108,7 @@ public class SpawnSystem : IInitializable, IUpdatable
         basicEnemy.enemyColor = Color.gray;
         enemies.Add(basicEnemy);
 
-        Debug.LogWarning("Using fallback enemy configuration! Please assign proper EnemyConfig assets to EnemyDatabase.");
+        Debug.LogWarning("Using fallback enemy configuration!");
         return enemies;
     }
 
@@ -141,9 +140,19 @@ public class SpawnSystem : IInitializable, IUpdatable
             return;
         }
 
+        Debug.Log($"StartSpawning called - Current wave: {currentWave}, Wave in progress: {waveInProgress}");
+
         isSpawning = true;
-        currentWave = 1;
-        StartNewWave();
+
+        if (!waveInProgress)
+        {
+            StartNewWave();
+        }
+        else
+        {
+            Debug.Log("Resuming current wave");
+            NotifyUIWaveStarted();
+        }
     }
 
     private void StartNewWave()
@@ -155,7 +164,7 @@ public class SpawnSystem : IInitializable, IUpdatable
         }
 
         currentWaveData = waveGenerator.GenerateWave(currentWave);
-        Debug.Log(currentWaveData.GetWaveInfo());
+        Debug.Log($"Starting new wave {currentWave}: {currentWaveData.GetWaveInfo()}");
 
         pendingSpawns.Clear();
         foreach (var spawnData in currentWaveData.enemyComposition)
@@ -166,16 +175,15 @@ public class SpawnSystem : IInitializable, IUpdatable
         waveTimer = 0f;
         spawnTimer = 0f;
         waveInProgress = true;
-        activeEnemies.Clear();
+        activeEnemies.RemoveWhere(enemy => enemy == null);
 
         NotifyUIWaveStarted();
     }
 
     public void StopSpawning()
     {
+        Debug.Log($"StopSpawning called - preserving wave {currentWave} state");
         isSpawning = false;
-        waveInProgress = false;
-        pendingSpawns.Clear();
     }
 
     public void OnUpdate(float deltaTime)
@@ -213,6 +221,7 @@ public class SpawnSystem : IInitializable, IUpdatable
 
         if (allEnemiesSpawned && (noActiveEnemies || timeExpired))
         {
+            Debug.Log($"Wave {currentWave} completed, starting wave {currentWave + 1}");
             currentWave++;
             StartNewWave();
         }
@@ -308,6 +317,9 @@ public class SpawnSystem : IInitializable, IUpdatable
         pendingSpawns.Clear();
         boundsCalculated = false;
         isInitialized = false;
+        waveInProgress = false;
+        currentWave = 1;
+        waveTimer = 0f;
     }
 
     private void ClearAllEnemies()

@@ -14,7 +14,47 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_GroupName: Default Local Group
   m_GUID: be44f0d6747a94e458832677b3cde050
-  m_SerializeEntries: []
+  m_SerializeEntries:
+  - m_GUID: 12d424f54706e7c4baa6cca9ecf0142a
+    m_Address: Enemy_strong
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 577661ea5d5ea9f419d3383ff8a2eae3
+    m_Address: Enemy_guardian
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 62e0946e6a1d6924c96b564dabdefe0f
+    m_Address: Enemy_sniper
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8458f5d2a24ed8a499540f4da9ac5214
+    m_Address: Enemy_tank
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8a476511c0d9963488d26269fc0e2feb
+    m_Address: Enemy_fast
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c80c7204c021efd4aa30fc0aa3bcdbee
+    m_Address: Enemy_assassin
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d563f588c157f1b4285b23f3362218cb
+    m_Address: Enemy_bomber
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e9d00c0334f1d084486c74d274c33bdd
+    m_Address: Enemy_burst
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 1e16e69b683d66548835fcd678670a6b, type: 2}
   m_SchemaSet:

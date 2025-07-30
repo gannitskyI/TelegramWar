@@ -15,6 +15,9 @@ public class GameplayUIController : BaseUIController
     private int currentLevel = 1;
     private int currentExperience = 0;
     private float currentHealth;
+    private int currentWave = 1;
+    private WaveData currentWaveData;
+    private bool isFirstShow = true;
 
     private ScoreSystem cachedScoreSystem;
     private SpawnSystem cachedSpawnSystem;
@@ -67,14 +70,56 @@ public class GameplayUIController : BaseUIController
     {
         base.OnShow();
 
+        if (isFirstShow)
+        {
+            Debug.Log("GameplayUI first show - setting initial values");
+            InitializeWithDefaults();
+            isFirstShow = false;
+        }
+        else
+        {
+            Debug.Log("GameplayUI re-show - preserving current values");
+            RestoreCurrentValues();
+        }
+
+        CacheSystems();
+    }
+
+    private void InitializeWithDefaults()
+    {
         UpdateTimer(0f);
         UpdateScore(0);
         UpdateLevel(1);
         UpdateExperience(0, 100);
         UpdateHealth(100f);
         UpdateWave(1);
+    }
 
-        CacheSystems();
+    private void RestoreCurrentValues()
+    {
+        SetText(TIMER_TEXT, FormatTime(currentTimer));
+        SetText(SCORE_TEXT, $"Score: {currentScore}");
+        SetText(LEVEL_TEXT, $"Level: {currentLevel}");
+        SetText(EXP_TEXT, $"EXP: {currentExperience}");
+        SetText(HEALTH_TEXT, $"Health: {currentHealth:F0}");
+
+        if (currentWaveData != null)
+        {
+            RestoreWaveInfo();
+        }
+        else
+        {
+            SetText(WAVE_TEXT, $"Wave: {currentWave}");
+        }
+
+        Debug.Log($"GameplayUI restored - Wave: {currentWave}, Score: {currentScore}, Level: {currentLevel}");
+    }
+
+    private void RestoreWaveInfo()
+    {
+        var waveInfoText = $"Wave {currentWaveData.waveNumber}\nEnemies: {currentWaveData.enemyCount}\nDifficulty: {currentWaveData.difficultyPoints:F0}";
+        SetText(WAVE_TEXT, waveInfoText);
+        Debug.Log($"GameplayUI restored wave info: {waveInfoText}");
     }
 
     private void CacheSystems()
@@ -107,7 +152,7 @@ public class GameplayUIController : BaseUIController
     private UIUpdateBatch BuildUpdateBatch()
     {
         bool updateScore = false, updateLevel = false, updateExp = false, updateWave = false;
-        int newScore = currentScore, newLevel = currentLevel, newExp = currentExperience, newExpToNext = 100, newWave = 1;
+        int newScore = currentScore, newLevel = currentLevel, newExp = currentExperience, newExpToNext = 100, newWave = currentWave;
 
         if (cachedScoreSystem != null)
         {
@@ -124,7 +169,7 @@ public class GameplayUIController : BaseUIController
         if (cachedSpawnSystem != null)
         {
             newWave = cachedSpawnSystem.GetCurrentWave();
-            updateWave = newWave != GetCurrentWave();
+            updateWave = newWave != currentWave;
         }
 
         return new UIUpdateBatch(
@@ -165,62 +210,87 @@ public class GameplayUIController : BaseUIController
 
         if (batch.updateWave)
         {
-            SetText(WAVE_TEXT, $"Wave: {batch.waveValue}");
+            currentWave = batch.waveValue;
+            SetText(WAVE_TEXT, $"Wave: {currentWave}");
+            Debug.Log($"GameplayUI wave updated to: {currentWave}");
         }
     }
 
-    public void UpdateTimer(float timeRemaining)
+    public void UpdateTimer(float timeElapsed)
     {
-        currentTimer = timeRemaining;
-        int minutes = Mathf.FloorToInt(timeRemaining / 60);
-        int seconds = Mathf.FloorToInt(timeRemaining % 60);
-        string timeText = $"{minutes:00}:{seconds:00}";
-
+        currentTimer = timeElapsed;
+        string timeText = FormatTime(timeElapsed);
         SetText(TIMER_TEXT, timeText);
-        SetTextColor(TIMER_TEXT, timeRemaining < 10f ? Color.red : Color.white);
+    }
+
+    private string FormatTime(float timeElapsed)
+    {
+        int minutes = Mathf.FloorToInt(timeElapsed / 60);
+        int seconds = Mathf.FloorToInt(timeElapsed % 60);
+        return $"{minutes:00}:{seconds:00}";
     }
 
     public void UpdateScore(int score)
     {
-        currentScore = score;
-        SetText(SCORE_TEXT, $"Score: {score}");
+        if (currentScore != score)
+        {
+            currentScore = score;
+            SetText(SCORE_TEXT, $"Score: {score}");
+        }
     }
 
     public void UpdateLevel(int level)
     {
-        currentLevel = level;
-        SetText(LEVEL_TEXT, $"Level: {level}");
+        if (currentLevel != level)
+        {
+            currentLevel = level;
+            SetText(LEVEL_TEXT, $"Level: {level}");
+        }
     }
 
     public void UpdateExperience(int experience, int experienceToNext)
     {
-        currentExperience = experience;
-        SetText(EXP_TEXT, $"EXP: {experience}/{experienceToNext}");
+        if (currentExperience != experience)
+        {
+            currentExperience = experience;
+            SetText(EXP_TEXT, $"EXP: {experience}/{experienceToNext}");
 
-        float progress = (float)experience / experienceToNext;
-        SetTextColor(EXP_TEXT, progress > 0.8f ? Color.yellow : Color.white);
+            float progress = (float)experience / experienceToNext;
+            SetTextColor(EXP_TEXT, progress > 0.8f ? Color.yellow : Color.white);
+        }
     }
 
     public void UpdateHealth(float health)
     {
-        currentHealth = health;
-        SetText(HEALTH_TEXT, $"Health: {health:F0}");
+        if (Mathf.Abs(currentHealth - health) > 0.1f)
+        {
+            currentHealth = health;
+            SetText(HEALTH_TEXT, $"Health: {health:F0}");
 
-        Color healthColor = health < 30f ? Color.red : (health < 60f ? Color.yellow : Color.white);
-        SetTextColor(HEALTH_TEXT, healthColor);
+            Color healthColor = health < 30f ? Color.red : (health < 60f ? Color.yellow : Color.white);
+            SetTextColor(HEALTH_TEXT, healthColor);
+        }
     }
 
     public void UpdateWave(int wave)
     {
-        SetText(WAVE_TEXT, $"Wave: {wave}");
+        if (currentWave != wave)
+        {
+            currentWave = wave;
+            SetText(WAVE_TEXT, $"Wave: {wave}");
+            Debug.Log($"GameplayUI wave manually updated to: {wave}");
+        }
     }
 
     public void UpdateWaveInfo(WaveData waveData)
     {
         if (waveData == null) return;
 
+        currentWave = waveData.waveNumber;
+        currentWaveData = waveData;
         var waveInfoText = $"Wave {waveData.waveNumber}\nEnemies: {waveData.enemyCount}\nDifficulty: {waveData.difficultyPoints:F0}";
         SetText(WAVE_TEXT, waveInfoText);
+        Debug.Log($"GameplayUI wave info updated: {waveInfoText}");
     }
 
     protected override void HandleButtonClick(string buttonName)
@@ -290,6 +360,7 @@ public class GameplayUIController : BaseUIController
         cachedSpawnSystem = null;
         cachedPlayerHealth = null;
         systemsCached = false;
+        isFirstShow = true;
     }
 
     public float GetCurrentTimer() => currentTimer;
@@ -297,12 +368,5 @@ public class GameplayUIController : BaseUIController
     public int GetCurrentLevel() => currentLevel;
     public int GetCurrentExperience() => currentExperience;
     public float GetCurrentHealth() => currentHealth;
-    private int GetCurrentWave()
-    {
-        if (cachedSpawnSystem != null)
-        {
-            return cachedSpawnSystem.GetCurrentWave();
-        }
-        return 1;
-    }
+    public int GetCurrentWave() => currentWave;
 }
