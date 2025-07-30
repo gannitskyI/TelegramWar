@@ -332,4 +332,74 @@ public class GameBootstrapper : MonoBehaviour
             loadingCanvas.gameObject.SetActive(false);
         }
     }
+
+    public void RestartGame()
+    {
+        Debug.Log("GameBootstrapper: Starting game restart...");
+        StartCoroutine(RestartGameCoroutine());
+    }
+
+    private IEnumerator RestartGameCoroutine()
+    {
+        // Показываем экран загрузки
+        if (loadingCanvas != null)
+        {
+            loadingCanvas.gameObject.SetActive(true);
+            UpdateProgress(0f, "Restarting game...");
+        }
+
+        // Останавливаем текущие системы
+        if (systemsInitializer != null)
+        {
+            UpdateProgress(0.2f, "Stopping systems...");
+            systemsInitializer.Cleanup();
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        // Очищаем Service Locator (кроме базовых сервисов)
+        UpdateProgress(0.4f, "Clearing services...");
+        var stateMachine = ServiceLocator.Get<GameStateMachine>();
+        var addressableManager = ServiceLocator.Get<AddressableManager>();
+        var systemsConfig = ServiceLocator.Get<SystemsConfiguration>();
+
+        ServiceLocator.Clear();
+
+        // Восстанавливаем базовые сервисы
+        if (addressableManager != null) ServiceLocator.Register<AddressableManager>(addressableManager);
+        if (stateMachine != null) ServiceLocator.Register<GameStateMachine>(stateMachine);
+        if (systemsConfig != null) ServiceLocator.Register<SystemsConfiguration>(systemsConfig);
+
+        // Переинициализируем системы
+        UpdateProgress(0.6f, "Reinitializing systems...");
+        systemsInitializer = new SystemsInitializer();
+        yield return systemsInitializer.InitializeAllSystems();
+        ServiceLocator.Register<SystemsInitializer>(systemsInitializer);
+
+        UpdateProgress(0.8f, "Preparing restart...");
+        yield return new WaitForSeconds(0.2f);
+
+        // Скрываем экран загрузки
+        UpdateProgress(1.0f, "Restart complete!");
+        yield return new WaitForSeconds(0.5f);
+
+        if (loadingCanvas != null)
+        {
+            loadingCanvas.gameObject.SetActive(false);
+        }
+
+        Debug.Log("GameBootstrapper: Game restart completed");
+    }
+
+    public static void RequestGameRestart()
+    {
+        var bootstrapper = Object.FindObjectOfType<GameBootstrapper>();
+        if (bootstrapper != null)
+        {
+            bootstrapper.RestartGame();
+        }
+        else
+        {
+            Debug.LogError("GameBootstrapper not found for restart!");
+        }
+    }
 }

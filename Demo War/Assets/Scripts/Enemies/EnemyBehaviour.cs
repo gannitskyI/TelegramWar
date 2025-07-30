@@ -515,7 +515,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         var projectile = projectileGO.AddComponent<EnemyProjectile>();
         projectile.Initialize(enemyConfig.attackDamage, speed, enemyConfig.projectileLifetime, isHoming, isExplosive);
 
-        try { projectileGO.tag = "EnemyBullet"; } catch { }
+        try { projectileGO.tag = "Enemy"; } catch { }
 
         int bulletLayer = LayerMask.NameToLayer("EnemyBullet");
         if (bulletLayer != -1) projectileGO.layer = bulletLayer;
@@ -792,11 +792,18 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             return;
         }
 
-        if (other.CompareTag("PlayerBullet"))
+        try
         {
-            Debug.Log($"Enemy {enemyConfig.enemyName}: Hit by tagged player bullet, damage=10");
-            TakeDamage(10f);
-            Destroy(other.gameObject);
+            if (other.CompareTag("PlayerBullet"))
+            {
+                Debug.Log($"Enemy {enemyConfig.enemyName}: Hit by tagged player bullet, damage=10");
+                TakeDamage(10f);
+                Destroy(other.gameObject);
+            }
+        }
+        catch
+        {
+            // Игнорируем ошибки с тегами
         }
     }
 
@@ -824,12 +831,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
     private void OnDestroy()
     {
-        if (cachedRenderer != null && cachedRenderer.sprite != null)
+        if (Application.isPlaying && cachedRenderer != null && cachedRenderer.sprite != null)
         {
             Destroy(cachedRenderer.sprite.texture);
             Destroy(cachedRenderer.sprite);
         }
-        Debug.Log($"Enemy {enemyConfig?.enemyName ?? gameObject.name}: Destroyed");
         onReturnToPool = null;
     }
 

@@ -39,6 +39,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
 
             if (inputReader == null)
             {
+                Debug.LogError("PlayerMovement: Failed to get InputReader!");
                 isInitialized = false;
                 yield break;
             }
@@ -57,29 +58,37 @@ public class PlayerMovement : MonoBehaviour, IInitializable
     private IEnumerator TryGetInputReader()
     {
         int attempts = 0;
-        while (attempts < 5 && inputReader == null)
+        while (attempts < 10 && inputReader == null)
         {
             if (ServiceLocator.TryGet<InputReader>(out var locatorInputReader))
             {
                 inputReader = locatorInputReader;
+                Debug.Log("PlayerMovement: Got InputReader from ServiceLocator");
                 break;
             }
 
             attempts++;
             yield return new WaitForSeconds(0.1f);
         }
+
+        if (inputReader == null)
+        {
+            Debug.LogError("PlayerMovement: Could not find InputReader after 10 attempts!");
+        }
     }
 
     private void HandleMoveInput(Vector2 worldPosition)
     {
-        if (!isInitialized) return;
+        if (!isInitialized)
+        {
+            Debug.LogWarning("PlayerMovement: Received input but not initialized yet");
+            return;
+        }
 
-        Vector3 clampedPosition = ClampToScreen(new Vector3(worldPosition.x, worldPosition.y, transform.position.z));
-
-        targetPosition = clampedPosition;
+        targetPosition = ClampToScreen(new Vector3(worldPosition.x, worldPosition.y, transform.position.z));
         isMoving = true;
 
-        Debug.Log($"Move target set to: {targetPosition}");
+        Debug.Log($"PlayerMovement: Move target set to: {targetPosition}");
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         WebGLHelper.TriggerHapticFeedback("light");
@@ -95,12 +104,17 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         {
             rb2d.linearVelocity = Vector2.zero;
         }
+        Debug.Log("PlayerMovement: Movement canceled");
     }
 
     private Vector3 ClampToScreen(Vector3 position)
     {
         var camera = Camera.main;
-        if (camera == null) return position;
+        if (camera == null)
+        {
+            Debug.LogWarning("PlayerMovement: No main camera found for screen clamping");
+            return position;
+        }
 
         Vector3 bottomLeft = camera.ScreenToWorldPoint(new Vector3(0, 0, camera.nearClipPlane));
         Vector3 topRight = camera.ScreenToWorldPoint(new Vector3(Screen.width, Screen.height, camera.nearClipPlane));
@@ -128,7 +142,6 @@ public class PlayerMovement : MonoBehaviour, IInitializable
                 return;
             }
 
-            Vector3 direction = (targetPosition - transform.position).normalized;
             Vector3 newPosition = Vector3.SmoothDamp(
                 transform.position,
                 targetPosition,
@@ -169,6 +182,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         {
             inputReader.MoveEvent -= HandleMoveInput;
             inputReader.MoveCancelEvent -= HandleMoveCancel;
+            Debug.Log("PlayerMovement: Input events unsubscribed");
         }
 
         if (rb2d != null)
@@ -195,7 +209,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         }
 
         isMoving = false;
-        Debug.Log($"Player position set to: {clampedPosition}");
+        Debug.Log($"PlayerMovement: Position set to: {clampedPosition}");
     }
 
     public void SetMoveSpeed(float newSpeed)

@@ -162,7 +162,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   attackRange: 10
   attackInterval: 0.5
-  bulletDamage: 100
+  bulletDamage: 1
   bulletSpeed: 5
   firePoint: {fileID: 0}
 --- !u!58 &78430848710107315

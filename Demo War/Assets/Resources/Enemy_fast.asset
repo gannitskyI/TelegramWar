@@ -18,18 +18,18 @@ MonoBehaviour:
   minWaveNumber: 4
   difficultyValue: 1
   maxHealth: 100
-  moveSpeed: 3
+  moveSpeed: 5
   collisionDamage: 10
   explosionDamage: 20
   experienceDrop: 10
   scale: 1
-  movementType: 0
+  movementType: 5
   detectionRange: 10
   optimalDistance: 5
   movementAmplitude: 2
   movementFrequency: 1
   canMoveOffScreen: 0
-  attackType: 0
+  attackType: 7
   attackRange: 8
   attackDamage: 15
   attackInterval: 2

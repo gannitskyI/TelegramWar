@@ -12,6 +12,19 @@ public class SystemsInitializer
 
     public IEnumerator InitializeAllSystems()
     {
+        Debug.Log("SystemsInitializer: Starting initialization...");
+
+        // Очищаем старые системы если есть
+        if (systems.Count > 0)
+        {
+            Debug.Log("SystemsInitializer: Clearing old systems...");
+            Cleanup();
+            systems.Clear();
+            updatableSystems.Clear();
+            fixedUpdatableSystems.Clear();
+        }
+
+        // Создаем новые системы
         systems.Add(systemFactory.Create<InputSystem>());
         systems.Add(systemFactory.Create<UISystem>());
         systems.Add(systemFactory.Create<SpawnSystem>());
@@ -23,6 +36,7 @@ public class SystemsInitializer
 
         foreach (var system in systems)
         {
+            Debug.Log($"SystemsInitializer: Initializing {system.GetType().Name}...");
             yield return system.Initialize();
 
             if (system is IUpdatable updatable)
@@ -32,9 +46,11 @@ public class SystemsInitializer
                 fixedUpdatableSystems.Add(fixedUpdatable);
 
             ServiceLocator.Register(system.GetType(), system);
+            Debug.Log($"SystemsInitializer: {system.GetType().Name} initialized and registered");
         }
 
         updateCoroutine = CoroutineRunner.StartRoutine(UpdateLoop());
+        Debug.Log($"SystemsInitializer: All {systems.Count} systems initialized successfully");
     }
 
     private IEnumerator UpdateLoop()
@@ -132,6 +148,8 @@ public class SystemsInitializer
 
     public void Cleanup()
     {
+        Debug.Log("SystemsInitializer: Starting cleanup...");
+
         if (updateCoroutine != null)
         {
             CoroutineRunner.StopRoutine(updateCoroutine);
@@ -154,6 +172,21 @@ public class SystemsInitializer
         systems.Clear();
         updatableSystems.Clear();
         fixedUpdatableSystems.Clear();
+        Debug.Log("SystemsInitializer: Cleanup complete");
+    }
+
+    public void RestartSystems()
+    {
+        Debug.Log("SystemsInitializer: Restarting all systems...");
+        CoroutineRunner.StartRoutine(RestartSystemsCoroutine());
+    }
+
+    private IEnumerator RestartSystemsCoroutine()
+    {
+        Cleanup();
+        yield return new WaitForSeconds(0.1f); // Небольшая пауза
+        yield return InitializeAllSystems();
+        Debug.Log("SystemsInitializer: Systems restarted successfully");
     }
 }
 

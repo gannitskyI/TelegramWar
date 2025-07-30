@@ -23,13 +23,13 @@ MonoBehaviour:
   explosionDamage: 20
   experienceDrop: 10
   scale: 1
-  movementType: 0
+  movementType: 2
   detectionRange: 10
   optimalDistance: 5
   movementAmplitude: 2
   movementFrequency: 1
   canMoveOffScreen: 0
-  attackType: 0
+  attackType: 1
   attackRange: 8
   attackDamage: 15
   attackInterval: 2

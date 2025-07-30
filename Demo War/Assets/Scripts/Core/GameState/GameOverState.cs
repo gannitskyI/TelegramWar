@@ -3,8 +3,9 @@ using UnityEngine;
 
 public class GameOverState : GameState
 {
+    private const string GAME_OVER_UI_ID = "GameOver";
     private int finalScore;
-    private GameObject gameOverUI;
+    private GameOverUIController gameOverUIController;
 
     public GameOverState(int score)
     {
@@ -15,42 +16,103 @@ public class GameOverState : GameState
     {
         Debug.Log($"Game Over! Final score: {finalScore}");
 
-        // Показываем UI game over
-        var addressableManager = ServiceLocator.Get<AddressableManager>();
-        if (addressableManager != null)
+        Time.timeScale = 0f;
+
+        StopAllGameSystems();
+        ShowGameOverUI();
+
+        yield return null;
+    }
+
+    private void StopAllGameSystems()
+    {
+        if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
-            var uiTask = addressableManager.InstantiateAsync("GameOverUI");
-            yield return new WaitUntil(() => uiTask.IsCompleted);
-            gameOverUI = uiTask.Result;
+            spawnSystem.StopSpawning();
         }
 
-        // Отключаем игровой инпут
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.DisableAllInput();
         }
 
-        yield return null;
+        ClearExistingEnemies();
     }
 
-    public void RestartGame()
+    private void ClearExistingEnemies()
     {
-        var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        stateMachine?.ChangeState(new GameplayState());
+        var enemies = Object.FindObjectsOfType<EnemyBehaviour>();
+        foreach (var enemy in enemies)
+        {
+            if (enemy != null)
+            {
+                Object.Destroy(enemy.gameObject);
+            }
+        }
+
+        var projectiles = Object.FindObjectsOfType<EnemyProjectile>();
+        foreach (var projectile in projectiles)
+        {
+            if (projectile != null)
+            {
+                Object.Destroy(projectile.gameObject);
+            }
+        }
+
+        var experienceParticles = Object.FindObjectsOfType<ExperienceParticle>();
+        foreach (var particle in experienceParticles)
+        {
+            if (particle != null)
+            {
+                Object.Destroy(particle.gameObject);
+            }
+        }
+
+        if (enemies.Length > 0 || projectiles.Length > 0 || experienceParticles.Length > 0)
+        {
+            Debug.Log($"Cleared {enemies.Length} enemies, {projectiles.Length} projectiles, {experienceParticles.Length} exp particles");
+        }
     }
 
-    public void ReturnToMenu()
+    private void ShowGameOverUI()
     {
-        var stateMachine = ServiceLocator.Get<GameStateMachine>();
-        stateMachine?.ChangeState(new MainMenuState());
+        var uiSystem = ServiceLocator.Get<UISystem>();
+        if (uiSystem == null)
+        {
+            Debug.LogError("UISystem not found! Cannot show game over screen.");
+            return;
+        }
+
+        if (uiSystem.IsUIActive("GameUI"))
+        {
+            uiSystem.HideUI("GameUI");
+        }
+
+        gameOverUIController = new GameOverUIController(finalScore);
+        uiSystem.RegisterUIController(GAME_OVER_UI_ID, gameOverUIController);
+        uiSystem.ShowUI(GAME_OVER_UI_ID);
+
+        Debug.Log("Game Over UI displayed");
+    }
+
+    public override void Update()
+    {
     }
 
     public override IEnumerator Exit()
     {
-        if (gameOverUI != null)
+        Debug.Log("Exiting Game Over state");
+
+        var uiSystem = ServiceLocator.Get<UISystem>();
+        if (uiSystem != null)
         {
-            Object.Destroy(gameOverUI);
+            uiSystem.HideUI(GAME_OVER_UI_ID);
+            uiSystem.UnregisterUIController(GAME_OVER_UI_ID);
         }
+
+        gameOverUIController = null;
+
+        Time.timeScale = 1f;
 
         yield return null;
     }

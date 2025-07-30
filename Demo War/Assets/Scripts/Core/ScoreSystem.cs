@@ -144,12 +144,20 @@ public class ScoreSystem : IInitializable
         return (float)currentExperience / experienceToNextLevel;
     }
 
-    public void Cleanup()
+    public void ResetForRestart()
     {
         currentScore = 0;
         currentExperience = 0;
         currentLevel = 1;
         experienceToNextLevel = 100;
         OnLevelUp = null;
+
+        Debug.Log("ScoreSystem completely reset for restart");
+    }
+
+    public void Cleanup()
+    {
+        OnLevelUp = null;
+        Debug.Log("ScoreSystem events cleaned up");
     }
 }

@@ -11,12 +11,36 @@ public class GameplayState : PausableGameState
     private const string GAMEPLAY_UI_ID = "GameUI";
     private bool isExiting = false;
     private bool playerCreated = false;
+    private bool forceReset = false;
+
+    public GameplayState(bool forceReset = false)
+    {
+        this.forceReset = forceReset;
+    }
+
+    public static GameplayState CreateRestart()
+    {
+        return new GameplayState(forceReset: true);
+    }
 
     public override IEnumerator Enter()
     {
-        Debug.Log($"GameplayState Enter - wasInitialized: {wasInitialized}, isPaused: {isPaused}");
+        Debug.Log($"GameplayState Enter - wasInitialized: {wasInitialized}, isPaused: {isPaused}, forceReset: {forceReset}");
 
-        if (wasInitialized)
+        if (forceReset)
+        {
+            Debug.Log("Force resetting GameplayState for restart");
+            wasInitialized = false;
+            isPaused = false;
+
+            if (playerInstance != null)
+            {
+                Object.Destroy(playerInstance);
+                playerInstance = null;
+            }
+        }
+
+        if (wasInitialized && !forceReset)
         {
             Debug.Log("Resuming existing gameplay - no recreation");
             Resume();
@@ -231,6 +255,29 @@ public class GameplayState : PausableGameState
         {
             playerHealth.OnPlayerDied += OnPlayerDied;
             playerHealth.ResetHealth();
+        }
+
+        var collider = playerInstance.GetComponent<Collider2D>();
+        if (collider == null)
+        {
+            var circleCollider = playerInstance.AddComponent<CircleCollider2D>();
+            circleCollider.isTrigger = true;
+            circleCollider.radius = 0.5f;
+        }
+
+        try
+        {
+            playerInstance.tag = "Player";
+        }
+        catch
+        {
+            Debug.LogWarning("Could not set Player tag");
+        }
+
+        int playerLayer = LayerMask.NameToLayer("Player");
+        if (playerLayer != -1)
+        {
+            playerInstance.layer = playerLayer;
         }
     }
 

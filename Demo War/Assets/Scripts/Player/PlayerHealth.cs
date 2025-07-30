@@ -2,7 +2,7 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 
-public class PlayerHealth : MonoBehaviour
+public class PlayerHealth : MonoBehaviour, IDamageable
 {
     [SerializeField] private float maxHealth = 100f;
     private float currentHealth;
@@ -35,14 +35,23 @@ public class PlayerHealth : MonoBehaviour
     private float damageTrackingDuration = 10f;
     private float totalDamageTaken = 0f;
 
+    private void Awake()
+    {
+        var existingDamageReceiver = GetComponent<PlayerDamageReceiver>();
+        if (existingDamageReceiver != null)
+        {
+            DestroyImmediate(existingDamageReceiver);
+        }
+    }
+
     private void Start()
     {
         currentHealth = maxHealth;
         isDead = false;
         totalDamageTaken = 0f;
-        OnHealthChanged?.Invoke(currentHealth, maxHealth);
-
         Debug.Log($"[PLAYER HEALTH] Player initialized with {currentHealth}/{maxHealth} health");
+        Debug.Log($"[PLAYER HEALTH] Invoking initial OnHealthChanged event");
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public void TakeDamage(float damage, IDamageSource source)
@@ -55,8 +64,7 @@ public class PlayerHealth : MonoBehaviour
 
         if (source.GetTeam() == DamageTeam.Player)
         {
-            Debug.LogError($"[PLAYER HEALTH] *** FRIENDLY FIRE DETECTED *** Source: {source.GetSourceName()}");
-            Debug.LogError($"[PLAYER HEALTH] This should be blocked by the damage system!");
+            Debug.LogWarning($"[PLAYER HEALTH] Friendly fire blocked from: {source.GetSourceName()}");
             return;
         }
 
@@ -73,13 +81,13 @@ public class PlayerHealth : MonoBehaviour
         Debug.Log($"[PLAYER HEALTH] Health: {previousHealth:F1} ? {currentHealth:F1}");
         Debug.Log($"[PLAYER HEALTH] Source team: {source.GetTeam()}, Type: {source.GetType().Name}");
 
+        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event: {currentHealth}/{maxHealth}");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
         if (currentHealth <= 0 && !isDead)
         {
             isDead = true;
-            Debug.LogError($"[PLAYER HEALTH] *** PLAYER DEATH *** Killed by: {source.GetSourceName()}");
-            LogDeathAnalysis();
+            Debug.Log($"[PLAYER HEALTH] Player died. Killed by: {source.GetSourceName()}");
             OnPlayerDied?.Invoke();
         }
     }
@@ -88,73 +96,6 @@ public class PlayerHealth : MonoBehaviour
     {
         damageHistory.Add(record);
         damageHistory.RemoveAll(r => Time.time - r.timestamp > damageTrackingDuration);
-    }
-
-    private void LogDeathAnalysis()
-    {
-        Debug.LogError("========== PLAYER DEATH ANALYSIS ==========");
-        Debug.LogError($"[DEATH] Final health: {currentHealth:F1}/{maxHealth:F1}");
-        Debug.LogError($"[DEATH] Total damage taken: {totalDamageTaken:F1}");
-        Debug.LogError($"[DEATH] Time of death: {Time.time:F2}s");
-        Debug.LogError($"[DEATH] Death position: {transform.position}");
-
-        if (damageHistory.Count > 0)
-        {
-            var lastDamage = damageHistory[damageHistory.Count - 1];
-            Debug.LogError($"[DEATH] Final blow: {lastDamage.damage:F1} from {lastDamage.sourceName} ({lastDamage.sourceType})");
-        }
-
-        Debug.LogError("--- Recent Damage History ---");
-        var damageByType = new Dictionary<string, float>();
-
-        for (int i = damageHistory.Count - 1; i >= 0; i--)
-        {
-            var record = damageHistory[i];
-            float timeAgo = Time.time - record.timestamp;
-
-            string key = $"{record.sourceType} ({record.sourceTeam})";
-            if (damageByType.ContainsKey(key))
-                damageByType[key] += record.damage;
-            else
-                damageByType[key] = record.damage;
-
-            Debug.LogError($"[DEATH] {timeAgo:F1}s ago: {record.damage:F1} from {record.sourceName} at {record.sourcePosition}");
-        }
-
-        Debug.LogError("--- Damage Summary ---");
-        foreach (var kvp in damageByType)
-        {
-            float percentage = (kvp.Value / totalDamageTaken) * 100f;
-            Debug.LogError($"[DEATH] {kvp.Key}: {kvp.Value:F1} damage ({percentage:F1}%)");
-        }
-
-        LogNearbyDamageSources();
-        Debug.LogError("==========================================");
-    }
-
-    private void LogNearbyDamageSources()
-    {
-        Debug.LogError("--- Nearby Damage Sources ---");
-
-        var nearbyObjects = Physics2D.OverlapCircleAll(transform.position, 5f);
-        foreach (var obj in nearbyObjects)
-        {
-            if (obj.gameObject == gameObject) continue;
-
-            var damageSource = obj.GetComponent<IDamageSource>();
-            if (damageSource != null)
-            {
-                float distance = Vector2.Distance(transform.position, obj.transform.position);
-                Debug.LogError($"[DEATH] Damage Source: {damageSource.GetSourceName()} ({damageSource.GetType().Name}) - Team: {damageSource.GetTeam()}, Damage: {damageSource.GetDamage():F1}, Distance: {distance:F2}");
-            }
-
-            var damageable = obj.GetComponent<IDamageable>();
-            if (damageable != null)
-            {
-                float distance = Vector2.Distance(transform.position, obj.transform.position);
-                Debug.LogError($"[DEATH] Damageable: {obj.name} - Team: {damageable.GetTeam()}, Alive: {damageable.IsAlive()}, Distance: {distance:F2}");
-            }
-        }
     }
 
     public void Heal(float amount)
@@ -169,6 +110,7 @@ public class PlayerHealth : MonoBehaviour
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
 
         Debug.Log($"[PLAYER HEALTH] Healing: +{amount:F1} ? {previousHealth:F1} ? {currentHealth:F1}");
+        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event after heal");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -181,39 +123,17 @@ public class PlayerHealth : MonoBehaviour
         damageHistory.Clear();
 
         Debug.Log($"[PLAYER HEALTH] Health reset: {previousHealth:F1} ? {currentHealth:F1}");
+        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event after reset");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public float GetCurrentHealth() => currentHealth;
     public float GetMaxHealth() => maxHealth;
     public bool IsDead() => isDead;
+    public bool IsAlive() => !isDead;
+    public DamageTeam GetTeam() => DamageTeam.Player;
     public float GetHealthPercentage() => currentHealth / maxHealth;
     public float GetTotalDamageTaken() => totalDamageTaken;
-
-    private void OnDestroy()
-    {
-        Debug.LogError($"[PLAYER HEALTH] *** PLAYER OBJECT DESTROYED ***");
-        Debug.LogError($"[PLAYER HEALTH] Final state - Health: {currentHealth:F1}/{maxHealth:F1}, Dead: {isDead}");
-        Debug.LogError($"[PLAYER HEALTH] Total damage taken: {totalDamageTaken:F1}");
-        Debug.LogError($"[PLAYER HEALTH] Destruction position: {transform.position}");
-
-        if (damageHistory.Count > 0)
-        {
-            Debug.LogError("--- Last 5 Damage Events ---");
-            for (int i = damageHistory.Count - 1; i >= Mathf.Max(0, damageHistory.Count - 5); i--)
-            {
-                var record = damageHistory[i];
-                float timeAgo = Time.time - record.timestamp;
-                Debug.LogError($"[PLAYER HEALTH] {timeAgo:F1}s ago: {record.damage:F1} from {record.sourceName} (Team: {record.sourceTeam})");
-            }
-        }
-        else
-        {
-            Debug.LogError("[PLAYER HEALTH] No damage was recorded - player destroyed without taking damage!");
-        }
-
-        LogNearbyDamageSources();
-    }
 
     [ContextMenu("Log Damage History")]
     private void DebugLogDamageHistory()

@@ -115,13 +115,10 @@ public class EnemyProjectile : MonoBehaviour
         {
             if (damageable.GetTeam() == DamageTeam.Enemy)
             {
-                Debug.Log($"[ENEMY PROJECTILE] Ignored friendly target: {other.name}");
                 return;
             }
 
             if (!damageable.IsAlive()) return;
-
-            Debug.Log($"[ENEMY PROJECTILE] Hit target: {other.name}");
 
             var damageSource = GetComponent<IDamageSource>();
             if (damageSource != null)
@@ -155,18 +152,23 @@ public class EnemyProjectile : MonoBehaviour
 
     private bool ShouldIgnoreCollision(Collider2D other)
     {
-        return other.CompareTag("Enemy") ||
-               other.CompareTag("EnemyBullet") ||
-               other.GetComponent<EnemyBehaviour>() != null ||
-               other.GetComponent<EnemyProjectile>() != null;
+        if (HasEnemyTag(other) || other.GetComponent<EnemyBehaviour>() != null || other.GetComponent<EnemyProjectile>() != null)
+        {
+            return true;
+        }
+        return false;
     }
 
-    private bool IsPlayer(Collider2D other)
+    private bool HasEnemyTag(Collider2D other)
     {
-        return other.CompareTag("Player") ||
-               other.GetComponent<PlayerHealth>() != null ||
-               other.GetComponent<PlayerMovement>() != null ||
-               other.GetComponent<PlayerCombat>() != null;
+        try
+        {
+            return other.CompareTag("Enemy");
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private bool IsWallOrObstacle(Collider2D other)
@@ -260,11 +262,17 @@ public class EnemyProjectile : MonoBehaviour
     {
         if (spriteRenderer != null && spriteRenderer.sprite != null)
         {
-            Destroy(spriteRenderer.sprite.texture);
-            Destroy(spriteRenderer.sprite);
+            if (Application.isPlaying)
+            {
+                Destroy(spriteRenderer.sprite.texture);
+                Destroy(spriteRenderer.sprite);
+            }
         }
 
-        Destroy(gameObject);
+        if (Application.isPlaying)
+        {
+            Destroy(gameObject);
+        }
     }
 
     public float GetDamage() => damage;
@@ -287,5 +295,3 @@ public class EnemyProjectile : MonoBehaviour
         }
     }
 }
-
- 

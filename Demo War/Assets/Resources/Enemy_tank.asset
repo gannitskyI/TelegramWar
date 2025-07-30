@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyId: tank
   enemyName: Enemy
-  tier: 2
+  tier: 5
   minWaveNumber: 1
   difficultyValue: 1
   maxHealth: 100
@@ -23,7 +23,7 @@ MonoBehaviour:
   explosionDamage: 20
   experienceDrop: 10
   scale: 1
-  movementType: 0
+  movementType: 7
   detectionRange: 10
   optimalDistance: 5
   movementAmplitude: 2
@@ -31,7 +31,7 @@ MonoBehaviour:
   canMoveOffScreen: 0
   attackType: 0
   attackRange: 8
-  attackDamage: 15
+  attackDamage: 150
   attackInterval: 2
   projectileSpeed: 10
   projectileLifetime: 5
@@ -46,8 +46,8 @@ MonoBehaviour:
   fleeWhenLowHealth: 0
   stunDuration: 0
   immuneToPlayerBullets: 0
-  armor: 0
-  enemyColor: {r: 0.13573885, g: 1, b: 0, a: 1}
+  armor: 10
+  enemyColor: {r: 0, g: 0, b: 0, a: 1}
   attackWarningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   attackWarningDuration: 0.5
   hasDeathAnimation: 1

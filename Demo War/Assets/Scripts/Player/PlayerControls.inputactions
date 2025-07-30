@@ -26,15 +26,37 @@
             ],
             "bindings": [
                 {
-                    "name": "",
+                    "name": "Mouse Click",
                     "id": "5aaa3a36-a9f3-4d72-8c28-39680d6a9308",
-                    "path": "<Mouse>/position",
-                    "interactions": "Press",
+                    "path": "OneModifier",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "modifier",
+                    "id": "2f4a8c1d-5e9b-4a2f-8d3e-7f1a9c5b2e8d",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "Move",
                     "isComposite": false,
-                    "isPartOfComposite": false
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "binding",
+                    "id": "3a7b9e2f-6c4d-5a8f-9e1b-4c7d8a2e5f9b",
+                    "path": "<Mouse>/position",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move",
+                    "isComposite": false,
+                    "isPartOfComposite": true
                 },
                 {
                     "name": "",
