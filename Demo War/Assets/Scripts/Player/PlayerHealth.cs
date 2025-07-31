@@ -42,6 +42,12 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         {
             DestroyImmediate(existingDamageReceiver);
         }
+
+        this.RegisterEventCleanup(() =>
+        {
+            OnHealthChanged = null;
+            OnPlayerDied = null;
+        });
     }
 
     private void Start()
@@ -49,8 +55,7 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         currentHealth = maxHealth;
         isDead = false;
         totalDamageTaken = 0f;
-        Debug.Log($"[PLAYER HEALTH] Player initialized with {currentHealth}/{maxHealth} health");
-        Debug.Log($"[PLAYER HEALTH] Invoking initial OnHealthChanged event");
+
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -58,13 +63,11 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     {
         if (isDead || damage < 0)
         {
-            Debug.LogWarning($"[PLAYER HEALTH] Damage rejected: isDead={isDead}, damage={damage}");
             return;
         }
 
         if (source.GetTeam() == DamageTeam.Player)
         {
-            Debug.LogWarning($"[PLAYER HEALTH] Friendly fire blocked from: {source.GetSourceName()}");
             return;
         }
 
@@ -77,17 +80,11 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         var damageRecord = new DamageRecord(actualDamage, source);
         RecordDamage(damageRecord);
 
-        Debug.Log($"[PLAYER HEALTH] Damage taken: {actualDamage:F1} from {source.GetSourceName()}");
-        Debug.Log($"[PLAYER HEALTH] Health: {previousHealth:F1} ? {currentHealth:F1}");
-        Debug.Log($"[PLAYER HEALTH] Source team: {source.GetTeam()}, Type: {source.GetType().Name}");
-
-        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event: {currentHealth}/{maxHealth}");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
         if (currentHealth <= 0 && !isDead)
         {
             isDead = true;
-            Debug.Log($"[PLAYER HEALTH] Player died. Killed by: {source.GetSourceName()}");
             OnPlayerDied?.Invoke();
         }
     }
@@ -102,15 +99,12 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     {
         if (amount < 0)
         {
-            Debug.LogWarning($"[PLAYER HEALTH] Heal called with negative value: {amount}");
             return;
         }
 
         float previousHealth = currentHealth;
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
 
-        Debug.Log($"[PLAYER HEALTH] Healing: +{amount:F1} ? {previousHealth:F1} ? {currentHealth:F1}");
-        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event after heal");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -122,8 +116,6 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         totalDamageTaken = 0f;
         damageHistory.Clear();
 
-        Debug.Log($"[PLAYER HEALTH] Health reset: {previousHealth:F1} ? {currentHealth:F1}");
-        Debug.Log($"[PLAYER HEALTH] Invoking OnHealthChanged event after reset");
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -135,17 +127,22 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     public float GetHealthPercentage() => currentHealth / maxHealth;
     public float GetTotalDamageTaken() => totalDamageTaken;
 
+    private void OnDestroy()
+    {
+        this.CleanupEvents();
+    }
+
     [ContextMenu("Log Damage History")]
     private void DebugLogDamageHistory()
     {
-        Debug.Log($"[PLAYER HEALTH] Current health: {currentHealth:F1}/{maxHealth:F1}");
-        Debug.Log($"[PLAYER HEALTH] Total damage taken: {totalDamageTaken:F1}");
-        Debug.Log($"[PLAYER HEALTH] Damage events: {damageHistory.Count}");
+        Debug.Log($"Current health: {currentHealth:F1}/{maxHealth:F1}");
+        Debug.Log($"Total damage taken: {totalDamageTaken:F1}");
+        Debug.Log($"Damage events: {damageHistory.Count}");
 
         foreach (var record in damageHistory)
         {
             float timeAgo = Time.time - record.timestamp;
-            Debug.Log($"[PLAYER HEALTH] {timeAgo:F1}s ago: {record.damage:F1} from {record.sourceName} (Team: {record.sourceTeam})");
+            Debug.Log($"{timeAgo:F1}s ago: {record.damage:F1} from {record.sourceName} (Team: {record.sourceTeam})");
         }
     }
 

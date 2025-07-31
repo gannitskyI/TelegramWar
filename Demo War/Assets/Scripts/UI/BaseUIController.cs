@@ -11,7 +11,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
     protected readonly Dictionary<string, Text> texts = new Dictionary<string, Text>();
     protected readonly Dictionary<string, TextMeshProUGUI> tmpTexts = new Dictionary<string, TextMeshProUGUI>();
     protected readonly Dictionary<string, System.Action> buttonCallbacks = new Dictionary<string, System.Action>();
- 
+
     private readonly List<Texture2D> createdTextures = new List<Texture2D>();
     private readonly List<Sprite> createdSprites = new List<Sprite>();
 
@@ -25,13 +25,18 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         this.prefabAddress = prefabAddress;
     }
 
-    public async void Show()
+    public void Show()
+    {
+        _ = ShowAsync();
+    }
+
+    public async Task ShowAsync()
     {
         if (isDestroyed || isVisible) return;
 
         if (!isInitialized)
         {
-            await InitializeUI();
+            await InitializeUIAsync();
         }
 
         if (uiGameObject != null && !isDestroyed)
@@ -54,7 +59,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         }
     }
 
-    protected virtual async Task InitializeUI()
+    protected virtual async Task InitializeUIAsync()
     {
         if (isInitialized || isDestroyed) return;
 
@@ -276,7 +281,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         var fallbackText = CreateFallbackText($"Fallback UI: {prefabAddress}");
         texts["FallbackText"] = fallbackText;
     }
- 
+
     protected Text CreateFallbackText(string content)
     {
         var textGO = new GameObject("FallbackText");
@@ -297,7 +302,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
 
         return text;
     }
- 
+
     protected Sprite CreateSafeSprite(int width, int height, System.Func<int, int, Color> pixelFunc)
     {
         var texture = new Texture2D(width, width);
@@ -315,7 +320,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         texture.Apply();
 
         var sprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
- 
+
         createdTextures.Add(texture);
         createdSprites.Add(sprite);
 
@@ -330,13 +335,13 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         if (isDestroyed || !isVisible) return;
         OnUpdate(deltaTime);
     }
- 
+
     public void Cleanup()
     {
         isDestroyed = true;
         isVisible = false;
         isInitialized = false;
- 
+
         foreach (var button in buttons.Values)
         {
             if (button != null)
@@ -349,7 +354,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         buttons.Clear();
         texts.Clear();
         tmpTexts.Clear();
- 
+
         CleanupCreatedResources();
 
         if (uiGameObject != null)
@@ -360,7 +365,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
 
         OnCleanup();
     }
- 
+
     private void CleanupCreatedResources()
     {
         foreach (var texture in createdTextures)

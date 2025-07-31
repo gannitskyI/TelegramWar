@@ -18,13 +18,12 @@ public class GameplayUIController : BaseUIController
     private float maxHealth = 100f;
     private int currentWave = 1;
     private WaveData currentWaveData;
-    private bool isFirstShow = true; 
 
-    private ScoreSystem cachedScoreSystem;
-    private SpawnSystem cachedSpawnSystem;
-    private PlayerHealth cachedPlayerHealth;
-    private bool systemsCached = false;
-    private bool healthEventSubscribed = false;
+    private ScoreSystem scoreSystem;
+    private SpawnSystem spawnSystem;
+    private PlayerHealth playerHealth;
+
+    private bool isInitialized = false;
 
     public GameplayUIController() : base("GameUI") { }
 
@@ -32,59 +31,137 @@ public class GameplayUIController : BaseUIController
     {
         base.OnShow();
 
-        CacheSystems();
-
-        if (isFirstShow)
+        if (!isInitialized)
         {
-            InitializeWithDefaults();
-            isFirstShow = false;
-        }
-        else
-        {
-            RestoreCurrentValues();
+            InitializeUIController();
+            isInitialized = true;
         }
 
-        SubscribeToHealthEvents();
+        SubscribeToEvents();
+        RefreshAllDisplays();
     }
- 
-    private void SubscribeToHealthEvents()
+
+    private void InitializeUIController()
     {
-        if (cachedPlayerHealth != null && !healthEventSubscribed)
+        ServiceLocator.TryGet<ScoreSystem>(out scoreSystem);
+        ServiceLocator.TryGet<SpawnSystem>(out spawnSystem);
+
+        if (ServiceLocator.TryGet<GameObject>(out var player) && player != null)
         {
-            cachedPlayerHealth.OnHealthChanged += OnPlayerHealthChanged;
-            healthEventSubscribed = true;
-
-            currentHealth = cachedPlayerHealth.GetCurrentHealth();
-            maxHealth = cachedPlayerHealth.GetMaxHealth();
-            UpdateHealthDisplay();
-
-            Debug.Log($"[GAMEPLAY UI] Subscribed to health events. Current: {currentHealth}/{maxHealth}");
+            playerHealth = player.GetComponent<PlayerHealth>();
         }
-        else if (cachedPlayerHealth == null)
-        {
-            currentHealth = 100f;
-            maxHealth = 100f;
-            UpdateHealthDisplay();
-            Debug.Log("[GAMEPLAY UI] Player not found yet, using default health values");
-        }
-    } 
+    }
 
-    private void UnsubscribeFromHealthEvents()
+    private void SubscribeToEvents()
     {
-        if (cachedPlayerHealth != null && healthEventSubscribed)
+        UnsubscribeFromEvents();
+
+        if (playerHealth != null)
         {
-            cachedPlayerHealth.OnHealthChanged -= OnPlayerHealthChanged;
-            healthEventSubscribed = false;
-            Debug.Log("[GAMEPLAY UI] Unsubscribed from health events");
+            playerHealth.OnHealthChanged += OnPlayerHealthChanged;
+        }
+
+        if (scoreSystem != null)
+        {
+            scoreSystem.OnLevelUp += OnLevelChanged;
+        }
+    }
+
+    private void UnsubscribeFromEvents()
+    {
+        if (playerHealth != null)
+        {
+            playerHealth.OnHealthChanged -= OnPlayerHealthChanged;
+        }
+
+        if (scoreSystem != null)
+        {
+            scoreSystem.OnLevelUp -= OnLevelChanged;
         }
     }
 
     private void OnPlayerHealthChanged(float newHealth, float newMaxHealth)
     {
-        Debug.Log($"[GAMEPLAY UI] Health changed event: {currentHealth}/{maxHealth} -> {newHealth}/{newMaxHealth}");
         currentHealth = newHealth;
         maxHealth = newMaxHealth;
         UpdateHealthDisplay();
+    }
+
+    private void OnLevelChanged()
+    {
+        if (scoreSystem != null)
+        {
+            currentLevel = scoreSystem.GetCurrentLevel();
+            SetText(LEVEL_TEXT, $"Level: {currentLevel}");
+            ShowLevelUpNotification();
+        }
+    }
+
+    private void RefreshAllDisplays()
+    {
+        UpdateTimer(currentTimer);
+
+        if (scoreSystem != null)
+        {
+            currentScore = scoreSystem.GetCurrentScore();
+            currentLevel = scoreSystem.GetCurrentLevel();
+            currentExperience = scoreSystem.GetCurrentExperience();
+            var expToNext = scoreSystem.GetExperienceToNextLevel();
+
+            SetText(SCORE_TEXT, $"Score: {currentScore}");
+            SetText(LEVEL_TEXT, $"Level: {currentLevel}");
+            SetText(EXP_TEXT, $"EXP: {currentExperience}/{expToNext}");
+        }
+
+        if (playerHealth != null)
+        {
+            currentHealth = playerHealth.GetCurrentHealth();
+            maxHealth = playerHealth.GetMaxHealth();
+        }
+        UpdateHealthDisplay();
+
+        if (spawnSystem != null)
+        {
+            currentWave = spawnSystem.GetCurrentWave();
+            SetText(WAVE_TEXT, $"Wave: {currentWave}");
+        }
+    }
+
+    protected override void OnUpdate(float deltaTime)
+    {
+        base.OnUpdate(deltaTime);
+
+        if (scoreSystem != null)
+        {
+            var newScore = scoreSystem.GetCurrentScore();
+            var newExp = scoreSystem.GetCurrentExperience();
+
+            if (newScore != currentScore)
+            {
+                currentScore = newScore;
+                SetText(SCORE_TEXT, $"Score: {currentScore}");
+            }
+
+            if (newExp != currentExperience)
+            {
+                currentExperience = newExp;
+                var expToNext = scoreSystem.GetExperienceToNextLevel();
+                SetText(EXP_TEXT, $"EXP: {currentExperience}/{expToNext}");
+
+                float progress = (float)currentExperience / expToNext;
+                SetTextColor(EXP_TEXT, progress > 0.8f ? Color.yellow : Color.white);
+            }
+        }
+
+        if (spawnSystem != null)
+        {
+            var newWave = spawnSystem.GetCurrentWave();
+            if (newWave != currentWave)
+            {
+                currentWave = newWave;
+                SetText(WAVE_TEXT, $"Wave: {currentWave}");
+            }
+        }
     }
 
     private void UpdateHealthDisplay()
@@ -96,150 +173,6 @@ public class GameplayUIController : BaseUIController
         Color healthColor = healthPercentage < 0.3f ? Color.red :
                            (healthPercentage < 0.6f ? Color.yellow : Color.white);
         SetTextColor(HEALTH_TEXT, healthColor);
-
-        Debug.Log($"[GAMEPLAY UI] Health display updated: {healthText} (Color: {healthColor})");
-    }
-
-    private void InitializeWithDefaults()
-    {
-        Debug.Log("[GAMEPLAY UI] Initializing with defaults");
-        UpdateTimer(0f);
-        UpdateScore(0);
-        UpdateLevel(1);
-        UpdateExperience(0, 100);
-        UpdateWave(1);
-
-        currentHealth = 100f;
-        maxHealth = 100f;
-        UpdateHealthDisplay();
-
-        if (cachedPlayerHealth != null)
-        {
-            Debug.Log($"[GAMEPLAY UI] PlayerHealth found during initialization: {cachedPlayerHealth.GetCurrentHealth()}/{cachedPlayerHealth.GetMaxHealth()}");
-        }
-        else
-        {
-            Debug.Log("[GAMEPLAY UI] PlayerHealth not found during initialization - using defaults");
-        }
-    }
-
-    private void RestoreCurrentValues()
-    {
-        Debug.Log("[GAMEPLAY UI] Restoring current values");
-        SetText(TIMER_TEXT, FormatTime(currentTimer));
-        SetText(SCORE_TEXT, $"Score: {currentScore}");
-        SetText(LEVEL_TEXT, $"Level: {currentLevel}");
-        SetText(EXP_TEXT, $"EXP: {currentExperience}");
-        UpdateHealthDisplay();
-
-        if (currentWaveData != null)
-        {
-            RestoreWaveInfo();
-        }
-        else
-        {
-            SetText(WAVE_TEXT, $"Wave: {currentWave}");
-        }
-
-        Debug.Log($"GameplayUI restored - Wave: {currentWave}, Score: {currentScore}, Level: {currentLevel}");
-    }
-
-    private void RestoreWaveInfo()
-    {
-        var waveInfoText = $"Wave {currentWaveData.waveNumber}\nEnemies: {currentWaveData.enemyCount}\nDifficulty: {currentWaveData.difficultyPoints:F0}";
-        SetText(WAVE_TEXT, waveInfoText);
-    }
-     
-    private void CacheSystems()
-    {
-        if (cachedScoreSystem == null)
-        {
-            ServiceLocator.TryGet<ScoreSystem>(out cachedScoreSystem);
-        }
-
-        if (cachedSpawnSystem == null)
-        {
-            ServiceLocator.TryGet<SpawnSystem>(out cachedSpawnSystem);
-        }
-
-        if (cachedPlayerHealth == null)
-        {
-            if (ServiceLocator.TryGet<GameObject>(out var player) && player != null)
-            {
-                cachedPlayerHealth = player.GetComponent<PlayerHealth>();
-                if (cachedPlayerHealth != null)
-                {
-                    Debug.Log($"[GAMEPLAY UI] Found PlayerHealth component: {cachedPlayerHealth.GetCurrentHealth()}/{cachedPlayerHealth.GetMaxHealth()}");
-                }
-            }
-        }
-
-        systemsCached = true;
-    }
-
-    protected override void OnUpdate(float deltaTime)
-    {
-        base.OnUpdate(deltaTime);
-
-        // ИСПРАВЛЕНИЕ: Более эффективная проверка систем
-        if (!systemsCached || (cachedPlayerHealth == null && !healthEventSubscribed))
-        {
-            CacheSystems();
-
-            if (cachedPlayerHealth != null && !healthEventSubscribed)
-            {
-                SubscribeToHealthEvents();
-            }
-        }
-
-        if (systemsCached)
-        {
-            UpdateUIFromSystems();
-        }
-    }
- 
-    private void UpdateUIFromSystems()
-    {
-        bool needsUpdate = false;
-
-        if (cachedScoreSystem != null)
-        {
-            var newScore = cachedScoreSystem.GetCurrentScore();
-            var newLevel = cachedScoreSystem.GetCurrentLevel();
-            var newExp = cachedScoreSystem.GetCurrentExperience();
-            var newExpToNext = cachedScoreSystem.GetExperienceToNextLevel();
-
-            if (newScore != currentScore)
-            {
-                currentScore = newScore;
-                SetText(SCORE_TEXT, $"Score: {currentScore}");
-            }
-
-            if (newLevel != currentLevel)
-            {
-                currentLevel = newLevel;
-                SetText(LEVEL_TEXT, $"Level: {currentLevel}");
-            }
-
-            if (newExp != currentExperience)
-            {
-                currentExperience = newExp;
-                SetText(EXP_TEXT, $"EXP: {currentExperience}/{newExpToNext}");
-
-                float progress = (float)currentExperience / newExpToNext;
-                SetTextColor(EXP_TEXT, progress > 0.8f ? Color.yellow : Color.white);
-            }
-        }
-
-        if (cachedSpawnSystem != null)
-        {
-            var newWave = cachedSpawnSystem.GetCurrentWave();
-            if (newWave != currentWave)
-            {
-                currentWave = newWave;
-                SetText(WAVE_TEXT, $"Wave: {currentWave}");
-            }
-        }
     }
 
     public void UpdateTimer(float timeElapsed)
@@ -248,7 +181,7 @@ public class GameplayUIController : BaseUIController
         string timeText = FormatTime(timeElapsed);
         SetText(TIMER_TEXT, timeText);
     }
-     
+
     private string FormatTime(float timeElapsed)
     {
         int minutes = Mathf.FloorToInt(timeElapsed / 60);
@@ -292,7 +225,6 @@ public class GameplayUIController : BaseUIController
         {
             currentHealth = health;
             UpdateHealthDisplay();
-            Debug.Log($"[GAMEPLAY UI] Health manually updated to: {health}");
         }
     }
 
@@ -328,27 +260,25 @@ public class GameplayUIController : BaseUIController
         SetTextColor(LEVEL_TEXT, Color.white);
         SetTextColor(EXP_TEXT, Color.white);
     }
-     
+
     protected override void OnHide()
     {
         base.OnHide();
-        UnsubscribeFromHealthEvents();
+        UnsubscribeFromEvents();
     }
- 
+
     protected override void OnCleanup()
     {
-        UnsubscribeFromHealthEvents();
+        UnsubscribeFromEvents();
         base.OnCleanup();
-         
-        cachedScoreSystem = null;
-        cachedSpawnSystem = null;
-        cachedPlayerHealth = null;
-        systemsCached = false;
-        isFirstShow = true;
- 
+
+        scoreSystem = null;
+        spawnSystem = null;
+        playerHealth = null;
+        isInitialized = false;
         currentWaveData = null;
     }
-     
+
     public float GetCurrentTimer() => currentTimer;
     public int GetCurrentScore() => currentScore;
     public int GetCurrentLevel() => currentLevel;
