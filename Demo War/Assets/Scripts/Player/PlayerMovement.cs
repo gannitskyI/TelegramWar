@@ -102,7 +102,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         isMoving = false;
         if (rb2d != null)
         {
-            rb2d.linearVelocity = Vector2.zero;
+            rb2d.linearVelocity = Vector2.zero; 
         }
         Debug.Log("PlayerMovement: Movement canceled");
     }
@@ -138,7 +138,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
             if (distance < 0.1f)
             {
                 isMoving = false;
-                rb2d.linearVelocity = Vector2.zero;
+                rb2d.linearVelocity = Vector2.zero; 
                 return;
             }
 
@@ -164,12 +164,12 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         if (distance > 0.1f)
         {
             float currentSpeed = Mathf.Min(moveSpeed, distance * 10f);
-            rb2d.linearVelocity = direction * currentSpeed;
+            rb2d.linearVelocity = direction * currentSpeed; 
         }
         else
         {
             isMoving = false;
-            rb2d.linearVelocity = Vector2.zero;
+            rb2d.linearVelocity = Vector2.zero; 
         }
     }
 
@@ -187,7 +187,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
 
         if (rb2d != null)
         {
-            rb2d.linearVelocity = Vector2.zero;
+            rb2d.linearVelocity = Vector2.zero;  
         }
     }
 
@@ -205,7 +205,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         if (rb2d != null)
         {
             rb2d.position = clampedPosition;
-            rb2d.linearVelocity = Vector2.zero;
+            rb2d.linearVelocity = Vector2.zero;  
         }
 
         isMoving = false;

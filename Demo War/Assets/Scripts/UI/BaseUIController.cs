@@ -11,6 +11,9 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
     protected readonly Dictionary<string, Text> texts = new Dictionary<string, Text>();
     protected readonly Dictionary<string, TextMeshProUGUI> tmpTexts = new Dictionary<string, TextMeshProUGUI>();
     protected readonly Dictionary<string, System.Action> buttonCallbacks = new Dictionary<string, System.Action>();
+ 
+    private readonly List<Texture2D> createdTextures = new List<Texture2D>();
+    private readonly List<Sprite> createdSprites = new List<Sprite>();
 
     protected bool isVisible;
     protected bool isInitialized;
@@ -80,7 +83,6 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
 
             Object.DontDestroyOnLoad(uiGameObject);
 
-            // КРИТИЧНО: Ждем до конца кадра для полной инициализации Unity UI
             await WaitForEndOfFrame();
 
             InitializeComponents();
@@ -98,7 +100,6 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
 
     private async Task WaitForEndOfFrame()
     {
-        // Ждем конца текущего кадра и еще один кадр для полной инициализации
         await Task.Yield();
         await Task.Yield();
     }
@@ -142,10 +143,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         }
     }
 
-    protected virtual void ValidateRequiredComponents()
-    {
-        // Переопределяется в наследниках для проверки обязательных компонентов
-    }
+    protected virtual void ValidateRequiredComponents() { }
 
     protected virtual void SetupButtonCallbacks()
     {
@@ -278,7 +276,7 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         var fallbackText = CreateFallbackText($"Fallback UI: {prefabAddress}");
         texts["FallbackText"] = fallbackText;
     }
-
+ 
     protected Text CreateFallbackText(string content)
     {
         var textGO = new GameObject("FallbackText");
@@ -299,6 +297,30 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
 
         return text;
     }
+ 
+    protected Sprite CreateSafeSprite(int width, int height, System.Func<int, int, Color> pixelFunc)
+    {
+        var texture = new Texture2D(width, width);
+        var colors = new Color[width * height];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                colors[y * width + x] = pixelFunc(x, y);
+            }
+        }
+
+        texture.SetPixels(colors);
+        texture.Apply();
+
+        var sprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
+ 
+        createdTextures.Add(texture);
+        createdSprites.Add(sprite);
+
+        return sprite;
+    }
 
     public void SetUIParent(Transform parentTransform) { }
     public bool IsVisible() => !isDestroyed && isVisible && uiGameObject != null && uiGameObject.activeInHierarchy;
@@ -308,13 +330,13 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         if (isDestroyed || !isVisible) return;
         OnUpdate(deltaTime);
     }
-
+ 
     public void Cleanup()
     {
         isDestroyed = true;
         isVisible = false;
         isInitialized = false;
-
+ 
         foreach (var button in buttons.Values)
         {
             if (button != null)
@@ -327,6 +349,8 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         buttons.Clear();
         texts.Clear();
         tmpTexts.Clear();
+ 
+        CleanupCreatedResources();
 
         if (uiGameObject != null)
         {
@@ -335,6 +359,28 @@ public abstract class BaseUIController : IUIController, IButtonUI, ITextUI
         }
 
         OnCleanup();
+    }
+ 
+    private void CleanupCreatedResources()
+    {
+        foreach (var texture in createdTextures)
+        {
+            if (texture != null)
+            {
+                Object.Destroy(texture);
+            }
+        }
+
+        foreach (var sprite in createdSprites)
+        {
+            if (sprite != null)
+            {
+                Object.Destroy(sprite);
+            }
+        }
+
+        createdTextures.Clear();
+        createdSprites.Clear();
     }
 
     protected virtual void OnShow() { }

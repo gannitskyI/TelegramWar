@@ -169,7 +169,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
         if (cachedRigidbody != null)
         {
-            cachedRigidbody.linearVelocity = Vector2.zero;
+            cachedRigidbody.linearVelocity = Vector2.zero;  
             cachedRigidbody.angularVelocity = 0f;
         }
 
@@ -363,7 +363,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         Vector2 direction = (targetPosition - currentPos).normalized;
 
         float actualSpeed = isRetreating ? moveSpeed * 1.5f : moveSpeed;
-        cachedRigidbody.linearVelocity = direction * actualSpeed;
+        cachedRigidbody.linearVelocity = direction * actualSpeed; 
 
         if (direction != Vector2.zero)
         {
@@ -371,6 +371,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
             transform.rotation = Quaternion.AngleAxis(angle - 90f, Vector3.forward);
         }
     }
+
 
     private void UpdateAttack(float distanceToPlayer)
     {
@@ -756,7 +757,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
         if (cachedRigidbody != null)
         {
-            cachedRigidbody.linearVelocity = Vector2.zero;
+            cachedRigidbody.linearVelocity = Vector2.zero;  
             cachedRigidbody.angularVelocity = 0f;
         }
 
@@ -833,8 +834,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         if (Application.isPlaying && cachedRenderer != null && cachedRenderer.sprite != null)
         {
-            Destroy(cachedRenderer.sprite.texture);
-            Destroy(cachedRenderer.sprite);
+            if (cachedRenderer.sprite.texture != null)
+            {
+                Object.DestroyImmediate(cachedRenderer.sprite.texture, true);
+            }
+            Object.DestroyImmediate(cachedRenderer.sprite, true);
         }
         onReturnToPool = null;
     }

@@ -1,18 +1,28 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public class UISystem : IInitializable, IUpdatable
 {
-    public int InitializationOrder => 15; // После InputSystem но до других систем
+    public int InitializationOrder => 15;
 
     private Dictionary<string, IUIController> uiControllers;
     private IUIController currentActiveUI;
 
     public IEnumerator Initialize()
-    { 
+    {
         uiControllers = new Dictionary<string, IUIController>();
- 
+
+        // Автоматическая регистрация UI-контроллеров в сцене
+        var controllers = Object.FindObjectsOfType<MonoBehaviour>().OfType<IUIController>();
+        foreach (var controller in controllers)
+        {
+            string uiId = controller.GetType().Name; // Или используйте константу, например, "GameOver"
+            RegisterUIController(uiId, controller);
+            Debug.Log($"Registered UI controller: {uiId}");
+        }
+
         yield return null;
     }
 
@@ -30,7 +40,7 @@ public class UISystem : IInitializable, IUpdatable
         }
 
         uiControllers[uiId] = controller;
-       
+        Debug.Log($"UI Controller registered: {uiId}");
     }
 
     public void UnregisterUIController(string uiId)
@@ -44,7 +54,7 @@ public class UISystem : IInitializable, IUpdatable
             }
 
             uiControllers.Remove(uiId);
-            
+            Debug.Log($"UI Controller unregistered: {uiId}");
         }
     }
 
@@ -54,6 +64,7 @@ public class UISystem : IInitializable, IUpdatable
         {
             return controller as T;
         }
+        Debug.LogWarning($"UI Controller not found: {uiId}");
         return null;
     }
 
@@ -65,23 +76,21 @@ public class UISystem : IInitializable, IUpdatable
             return;
         }
 
-        // Скрываем текущий активный UI
         if (currentActiveUI != null && currentActiveUI != controller)
         {
             currentActiveUI.Hide();
         }
 
-        // Показываем новый UI
         controller.Show();
         currentActiveUI = controller;
- 
+        Debug.Log($"Showing UI: {uiId}");
     }
 
     public void HideUI(string uiId)
     {
         if (!uiControllers.TryGetValue(uiId, out var controller))
         {
-            Debug.LogError($"UI Controller not found: {uiId}");
+            Debug.LogWarning($"UI Controller not found: {uiId}");
             return;
         }
 
@@ -91,7 +100,8 @@ public class UISystem : IInitializable, IUpdatable
         {
             currentActiveUI = null;
         }
- 
+
+        Debug.Log($"Hiding UI: {uiId}");
     }
 
     public void HideAllUI()
@@ -100,7 +110,8 @@ public class UISystem : IInitializable, IUpdatable
         {
             controller.Hide();
         }
-        currentActiveUI = null; 
+        currentActiveUI = null;
+        Debug.Log("All UI hidden");
     }
 
     public bool IsUIActive(string uiId)
@@ -114,13 +125,11 @@ public class UISystem : IInitializable, IUpdatable
 
     public void OnUpdate(float deltaTime)
     {
-        // Обновляем активный UI контроллер
         currentActiveUI?.Update(deltaTime);
     }
 
     public void Cleanup()
     {
-        // Очищаем все UI контроллеры
         foreach (var controller in uiControllers.Values)
         {
             controller.Cleanup();
@@ -128,6 +137,6 @@ public class UISystem : IInitializable, IUpdatable
 
         uiControllers.Clear();
         currentActiveUI = null;
- 
+        Debug.Log("UISystem cleaned up");
     }
 }

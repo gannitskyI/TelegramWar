@@ -53,7 +53,7 @@ public class Bullet : MonoBehaviour
     {
         if (rb != null)
         {
-            rb.linearVelocity = transform.up * speed;
+            rb.linearVelocity = transform.up * speed; 
         }
 
         timer = lifetime;
@@ -244,7 +244,7 @@ public class Bullet : MonoBehaviour
 
         if (rb != null)
         {
-            rb.linearVelocity = direction.normalized * speed;
+            rb.linearVelocity = direction.normalized * speed;  
         }
 
         if (direction != Vector3.zero)

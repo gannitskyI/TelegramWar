@@ -20,6 +20,10 @@ public class ExperienceParticle : MonoBehaviour
     private float pulseSpeed = 3f;
     private Color originalColor;
 
+    // ИСПРАВЛЕНИЕ: Отслеживание созданных ресурсов
+    private Texture2D createdTexture;
+    private Sprite createdSprite;
+
     private static readonly List<ExperienceParticle> allParticles = new List<ExperienceParticle>(100);
     private static readonly Queue<ExperienceParticle> particlePool = new Queue<ExperienceParticle>(50);
     private static Transform playerTransform;
@@ -225,10 +229,12 @@ public class ExperienceParticle : MonoBehaviour
     public void SetExperienceValue(int value) => experienceValue = value;
     public int GetExperienceValue() => experienceValue;
     public bool IsCollected() => isCollected;
-
+ 
     private void CreateExperienceSprite()
-    {
-        var texture = new Texture2D(32, 32);
+    { 
+        CleanupCreatedResources();
+
+        createdTexture = new Texture2D(32, 32);
         var colors = new Color[32 * 32];
         Vector2 center = new Vector2(16f, 16f);
 
@@ -249,13 +255,28 @@ public class ExperienceParticle : MonoBehaviour
             }
         }
 
-        texture.SetPixels(colors);
-        texture.Apply();
+        createdTexture.SetPixels(colors);
+        createdTexture.Apply();
 
-        var sprite = Sprite.Create(texture, new Rect(0, 0, 32, 32), new Vector2(0.5f, 0.5f), 100f);
-        spriteRenderer.sprite = sprite;
+        createdSprite = Sprite.Create(createdTexture, new Rect(0, 0, 32, 32), new Vector2(0.5f, 0.5f), 100f);
+        spriteRenderer.sprite = createdSprite;
         originalColor = new Color(0.2f, 1f, 0.3f, 1f);
         spriteRenderer.color = originalColor;
+    }
+     
+    private void CleanupCreatedResources()
+    {
+        if (createdTexture != null)
+        {
+            Object.Destroy(createdTexture);
+            createdTexture = null;
+        }
+
+        if (createdSprite != null)
+        {
+            Object.Destroy(createdSprite);
+            createdSprite = null;
+        }
     }
 
     void OnTriggerEnter2D(Collider2D other)
@@ -268,9 +289,36 @@ public class ExperienceParticle : MonoBehaviour
             CollectExperience();
         }
     }
-
-    public static void ClearAllPools()
+ 
+    private void OnDestroy()
     {
+        CleanupCreatedResources();
+
+        if (allParticles.Contains(this))
+        {
+            allParticles.Remove(this);
+        }
+    }
+     
+    public static void ClearAllPools()
+    { 
+        foreach (var particle in allParticles.ToArray())
+        {
+            if (particle != null)
+            {
+                particle.CleanupCreatedResources();
+            }
+        }
+
+        while (particlePool.Count > 0)
+        {
+            var particle = particlePool.Dequeue();
+            if (particle != null)
+            {
+                particle.CleanupCreatedResources();
+            }
+        }
+
         allParticles.Clear();
         particlePool.Clear();
         playerTransform = null;
