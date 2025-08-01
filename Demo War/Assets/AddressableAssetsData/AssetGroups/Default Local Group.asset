@@ -30,6 +30,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 71b260da9f6e98c48afe95d8fc5e7114
+    m_Address: UpgradeDatabase
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8458f5d2a24ed8a499540f4da9ac5214
     m_Address: Enemy_tank
     m_ReadOnly: 0

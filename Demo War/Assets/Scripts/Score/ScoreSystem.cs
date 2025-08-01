@@ -18,15 +18,12 @@ public class ScoreSystem : IInitializable
         currentExperience = 0;
         currentLevel = 1;
         experienceToNextLevel = 100;
-
         yield return null;
     }
 
     public void AddScore(int points)
     {
         currentScore += points;
-        Debug.Log($"Score: {currentScore}");
-
         NotifyUIScoreChanged();
     }
 
@@ -40,11 +37,7 @@ public class ScoreSystem : IInitializable
 
         int bonusExperience = Mathf.RoundToInt(experience * expMultiplier);
         currentExperience += bonusExperience;
-
-        Debug.Log($"Experience: +{bonusExperience} (total: {currentExperience})");
-
         AddScore(bonusExperience);
-
         CheckForLevelUp();
     }
 
@@ -54,45 +47,43 @@ public class ScoreSystem : IInitializable
         {
             currentLevel++;
             currentExperience -= experienceToNextLevel;
-
             experienceToNextLevel = Mathf.RoundToInt(experienceToNextLevel * 1.2f);
 
-            Debug.Log($"Level up! New level: {currentLevel}");
-            Debug.Log($"Experience to next level: {experienceToNextLevel}");
-
             NotifyUILevelUp();
-
             OnLevelUp?.Invoke();
-
             TriggerUpgradeSelection();
         }
     }
 
     private void TriggerUpgradeSelection()
     {
-        Debug.Log("Triggering upgrade selection - using pause manager (NO STATE CHANGES)");
-
-        if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
+        if (!ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
-            var upgradeOptions = upgradeSystem.GenerateUpgradeOptions(3);
-            GamePauseManager.Instance.ShowUpgradeSelection(upgradeOptions);
+            Debug.LogError("UpgradeSystem not found! Cannot show upgrade selection.");
+            return;
         }
-        else
-        {
-            Debug.LogError("UpgradeSystem not found! Cannot generate upgrade options.");
-            var fallbackUpgrades = CreateFallbackUpgrades();
-            GamePauseManager.Instance.ShowUpgradeSelection(fallbackUpgrades);
-        }
-    }
 
-    private System.Collections.Generic.List<Upgrade> CreateFallbackUpgrades()
-    {
-        return new System.Collections.Generic.List<Upgrade>
+        if (!upgradeSystem.IsDatabaseLoaded())
         {
-            new Upgrade("damage_boost", "Damage Boost", "+20% damage", UpgradeType.Damage, 0.2f),
-            new Upgrade("attack_speed", "Attack Speed", "+25% attack speed", UpgradeType.AttackSpeed, 0.25f),
-            new Upgrade("health_boost", "Health Boost", "+30% max health", UpgradeType.Health, 0.3f)
-        };
+            Debug.LogError("UpgradeSystem database not loaded! Cannot show upgrade selection.");
+            return;
+        }
+
+        var upgradeOptions = upgradeSystem.GenerateUpgradeOptions(3);
+
+        if (upgradeOptions == null || upgradeOptions.Count == 0)
+        {
+            Debug.LogError("No upgrade options generated! Check your UpgradeDatabase configuration.");
+            return;
+        }
+
+        Debug.Log($"Triggering upgrade selection with {upgradeOptions.Count} options from YOUR database");
+        foreach (var option in upgradeOptions)
+        {
+            Debug.Log($"- Option: {option.DisplayName} (ID: {option.UpgradeId})");
+        }
+
+        GamePauseManager.Instance.ShowUpgradeSelection(upgradeOptions);
     }
 
     private void NotifyUIScoreChanged()
@@ -100,10 +91,7 @@ public class ScoreSystem : IInitializable
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
             var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
-            if (gameplayUI != null)
-            {
-                gameplayUI.UpdateScore(currentScore);
-            }
+            gameplayUI?.UpdateScore(currentScore);
         }
     }
 
@@ -112,37 +100,15 @@ public class ScoreSystem : IInitializable
         if (ServiceLocator.TryGet<UISystem>(out var uiSystem))
         {
             var gameplayUI = uiSystem.GetUIController<GameplayUIController>("GameUI");
-            if (gameplayUI != null)
-            {
-                gameplayUI.ShowLevelUpNotification();
-            }
+            gameplayUI?.ShowLevelUpNotification();
         }
     }
 
-    public int GetCurrentScore()
-    {
-        return currentScore;
-    }
-
-    public int GetCurrentExperience()
-    {
-        return currentExperience;
-    }
-
-    public int GetCurrentLevel()
-    {
-        return currentLevel;
-    }
-
-    public int GetExperienceToNextLevel()
-    {
-        return experienceToNextLevel;
-    }
-
-    public float GetLevelProgress()
-    {
-        return (float)currentExperience / experienceToNextLevel;
-    }
+    public int GetCurrentScore() => currentScore;
+    public int GetCurrentExperience() => currentExperience;
+    public int GetCurrentLevel() => currentLevel;
+    public int GetExperienceToNextLevel() => experienceToNextLevel;
+    public float GetLevelProgress() => (float)currentExperience / experienceToNextLevel;
 
     public void ResetForRestart()
     {
@@ -151,13 +117,10 @@ public class ScoreSystem : IInitializable
         currentLevel = 1;
         experienceToNextLevel = 100;
         OnLevelUp = null;
-
-        Debug.Log("ScoreSystem completely reset for restart");
     }
 
     public void Cleanup()
     {
         OnLevelUp = null;
-        Debug.Log("ScoreSystem events cleaned up");
     }
 }

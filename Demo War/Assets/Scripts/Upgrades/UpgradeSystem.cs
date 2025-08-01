@@ -1,349 +1,375 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
-public enum UpgradeType
-{
-    Damage,
-    AttackSpeed,
-    AttackRange,
-    MoveSpeed,
-    Health,
-    HealthRegen,
-    ExperienceMultiplier,
-    CriticalChance,
-    CriticalDamage
-}
 
 public class UpgradeSystem : IInitializable
 {
     public int InitializationOrder => 25;
 
-    private readonly Dictionary<string, Upgrade> availableUpgrades = new Dictionary<string, Upgrade>();
-    private readonly Dictionary<string, Upgrade> playerUpgrades = new Dictionary<string, Upgrade>();
+    private UpgradeDatabase upgradeDatabase;
+    private PlayerUpgradeManager upgradeManager;
+    private GameObject playerObject;
+    private bool isDatabaseLoaded = false;
+    private bool isPlayerFound = false;
 
-    public event Action<List<Upgrade>> OnUpgradeOptionsGenerated;
-    public event Action<Upgrade> OnUpgradeSelected;
+    public event Action<List<UpgradeConfig>> OnUpgradeOptionsGenerated;
+    public event Action<PlayerUpgrade> OnUpgradeApplied;
+    public event Action<PlayerUpgrade> OnUpgradeLeveledUp;
+    public event Action OnUpgradesReset;
 
-    public System.Collections.IEnumerator Initialize()
+    public IReadOnlyDictionary<string, PlayerUpgrade> ActiveUpgrades => upgradeManager?.ActiveUpgrades;
+    public int TotalUpgradeCount => upgradeManager?.TotalUpgradeCount ?? 0;
+    public int TotalUpgradeLevels => upgradeManager?.TotalUpgradeLevels ?? 0;
+
+    public IEnumerator Initialize()
     {
-        InitializeUpgrades();
+        yield return LoadUpgradeDatabaseStrict();
+
+        if (!isDatabaseLoaded || upgradeDatabase == null)
+        {
+            Debug.LogError("UpgradeSystem: Failed to load upgrade database - system will not function!");
+            yield break;
+        }
+
+        Debug.Log("UpgradeSystem: Database loaded, but player detection deferred until first upgrade request");
         yield return null;
     }
 
-    private void InitializeUpgrades()
+    private IEnumerator LoadUpgradeDatabaseStrict()
     {
-        var upgrades = new[]
+        var addressableManager = ServiceLocator.Get<AddressableManager>();
+        if (addressableManager == null)
         {
-            new Upgrade("damage_boost", "Damage Boost", "+20% damage", UpgradeType.Damage, 0.2f, 5),
-            new Upgrade("mega_damage", "Mega Damage", "+50% damage", UpgradeType.Damage, 0.5f, 3),
-            new Upgrade("attack_speed", "Attack Speed", "+25% attack speed", UpgradeType.AttackSpeed, 0.25f, 4),
-            new Upgrade("rapid_fire", "Rapid Fire", "+60% attack speed", UpgradeType.AttackSpeed, 0.6f, 2),
-            new Upgrade("range_boost", "Range Boost", "+30% attack range", UpgradeType.AttackRange, 0.3f, 3),
-            new Upgrade("sniper_range", "Sniper Range", "+80% attack range", UpgradeType.AttackRange, 0.8f, 2),
-            new Upgrade("move_speed", "Move Speed", "+25% movement speed", UpgradeType.MoveSpeed, 0.25f, 4),
-            new Upgrade("swift_feet", "Swift Feet", "+50% movement speed", UpgradeType.MoveSpeed, 0.5f, 2),
-            new Upgrade("health_boost", "Health Boost", "+30% max health", UpgradeType.Health, 0.3f, 3),
-            new Upgrade("tank_health", "Tank Health", "+70% max health", UpgradeType.Health, 0.7f, 2),
-            new Upgrade("health_regen", "Health Regeneration", "Regenerate 2 HP/sec", UpgradeType.HealthRegen, 2f, 3),
-            new Upgrade("exp_multiplier", "Experience Boost", "+40% experience gain", UpgradeType.ExperienceMultiplier, 0.4f, 3),
-            new Upgrade("crit_chance", "Critical Chance", "+15% critical hit chance", UpgradeType.CriticalChance, 0.15f, 4),
-            new Upgrade("crit_damage", "Critical Damage", "+50% critical hit damage", UpgradeType.CriticalDamage, 0.5f, 3)
-        };
+            Debug.LogError("UpgradeSystem: AddressableManager not found!");
+            yield break;
+        }
 
-        foreach (var upgrade in upgrades)
+        Debug.Log("UpgradeSystem: Loading UpgradeDatabase from Addressables...");
+
+        var loadTask = addressableManager.LoadAssetAsync<UpgradeDatabase>("UpgradeDatabase");
+
+        while (!loadTask.IsCompleted)
         {
-            availableUpgrades[upgrade.id] = upgrade;
+            yield return null;
+        }
+
+        upgradeDatabase = loadTask.Result;
+
+        if (upgradeDatabase == null)
+        {
+            Debug.LogError("UpgradeSystem: UpgradeDatabase not found in Addressables!");
+            Debug.LogError("Please ensure UpgradeDatabase is marked as Addressable with key 'UpgradeDatabase'");
+            yield break;
+        }
+
+        upgradeDatabase.Initialize();
+
+        if (upgradeDatabase.AllUpgrades == null || upgradeDatabase.AllUpgrades.Count == 0)
+        {
+            Debug.LogError("UpgradeSystem: UpgradeDatabase is empty! Please add UpgradeConfig assets to the database.");
+            yield break;
+        }
+
+        isDatabaseLoaded = true;
+        Debug.Log($"UpgradeSystem: Successfully loaded database with {upgradeDatabase.AllUpgrades.Count} upgrades");
+
+        foreach (var upgrade in upgradeDatabase.AllUpgrades)
+        {
+            Debug.Log($"- Loaded upgrade: {upgrade.DisplayName} ({upgrade.UpgradeId})");
         }
     }
 
-    public List<Upgrade> GenerateUpgradeOptions(int count = 3)
+    private bool EnsurePlayerAndManagerReady()
     {
-        var availableKeys = GetAvailableUpgradeKeys();
-        var options = SelectRandomUpgrades(availableKeys, count);
+        if (isPlayerFound && upgradeManager != null)
+            return true;
+
+        if (!FindPlayer())
+        {
+            Debug.LogError("UpgradeSystem: Player object not found!");
+            return false;
+        }
+
+        if (upgradeManager == null)
+        {
+            InitializeUpgradeManager();
+        }
+
+        return upgradeManager != null;
+    }
+
+    private bool FindPlayer()
+    {
+        if (ServiceLocator.TryGet<GameObject>(out var player))
+        {
+            playerObject = player;
+            isPlayerFound = true;
+            Debug.Log($"UpgradeSystem: Found player object: {player.name}");
+            return true;
+        }
+
+        var playerTag = GameObject.FindWithTag("Player");
+        if (playerTag != null)
+        {
+            playerObject = playerTag;
+            isPlayerFound = true;
+            ServiceLocator.Register<GameObject>(playerObject);
+            Debug.Log($"UpgradeSystem: Found player by tag: {playerTag.name}");
+            return true;
+        }
+
+        var playerHealth = UnityEngine.Object.FindObjectOfType<PlayerHealth>();
+        if (playerHealth != null)
+        {
+            playerObject = playerHealth.gameObject;
+            isPlayerFound = true;
+            ServiceLocator.Register<GameObject>(playerObject);
+            Debug.Log($"UpgradeSystem: Found player by PlayerHealth component: {playerObject.name}");
+            return true;
+        }
+
+        var playerMovement = UnityEngine.Object.FindObjectOfType<PlayerMovement>();
+        if (playerMovement != null)
+        {
+            playerObject = playerMovement.gameObject;
+            isPlayerFound = true;
+            ServiceLocator.Register<GameObject>(playerObject);
+            Debug.Log($"UpgradeSystem: Found player by PlayerMovement component: {playerObject.name}");
+            return true;
+        }
+
+        Debug.LogError("UpgradeSystem: No player object found by any method!");
+        return false;
+    }
+
+    private void InitializeUpgradeManager()
+    {
+        if (upgradeDatabase == null || playerObject == null)
+        {
+            Debug.LogError("Cannot initialize upgrade manager - missing database or player");
+            return;
+        }
+
+        upgradeManager = new PlayerUpgradeManager(upgradeDatabase, playerObject);
+
+        upgradeManager.OnUpgradeAdded += HandleUpgradeAdded;
+        upgradeManager.OnUpgradeLeveledUp += HandleUpgradeLeveledUp;
+        upgradeManager.OnUpgradesReset += HandleUpgradesReset;
+
+        Debug.Log("UpgradeSystem: UpgradeManager initialized successfully");
+    }
+
+    private void HandleUpgradeAdded(PlayerUpgrade upgrade)
+    {
+        OnUpgradeApplied?.Invoke(upgrade);
+    }
+
+    private void HandleUpgradeLeveledUp(PlayerUpgrade upgrade)
+    {
+        OnUpgradeLeveledUp?.Invoke(upgrade);
+    }
+
+    private void HandleUpgradesReset()
+    {
+        OnUpgradesReset?.Invoke();
+    }
+
+    public List<UpgradeConfig> GenerateUpgradeOptions(int count = 3)
+    {
+        if (!isDatabaseLoaded || upgradeDatabase == null)
+        {
+            Debug.LogError("UpgradeSystem: Database not loaded, cannot generate options");
+            return new List<UpgradeConfig>();
+        }
+
+        if (!EnsurePlayerAndManagerReady())
+        {
+            Debug.LogError("UpgradeSystem: Player or manager not ready, cannot generate options");
+            return new List<UpgradeConfig>();
+        }
+
+        var options = upgradeManager.GenerateUpgradeOptions(count);
+
+        if (options == null || options.Count == 0)
+        {
+            Debug.LogError("UpgradeSystem: Failed to generate upgrade options from database!");
+            Debug.LogError("Check that your UpgradeDatabase has enabled upgrades with proper conditions");
+            return new List<UpgradeConfig>();
+        }
+
+        Debug.Log($"UpgradeSystem: Generated {options.Count} upgrade options from YOUR database:");
+        foreach (var option in options)
+        {
+            Debug.Log($"- {option.DisplayName}: {option.Description} (ID: {option.UpgradeId})");
+        }
 
         OnUpgradeOptionsGenerated?.Invoke(options);
         return options;
     }
 
-    private List<string> GetAvailableUpgradeKeys()
+    public bool SelectUpgrade(UpgradeConfig config)
     {
-        var availableKeys = new List<string>();
-
-        foreach (var kvp in availableUpgrades)
+        if (!EnsurePlayerAndManagerReady())
         {
-            var upgrade = kvp.Value;
-
-            if (playerUpgrades.TryGetValue(upgrade.id, out var existingUpgrade))
-            {
-                if (existingUpgrade.CanUpgrade)
-                {
-                    availableKeys.Add(upgrade.id);
-                }
-            }
-            else
-            {
-                availableKeys.Add(upgrade.id);
-            }
+            Debug.LogError("UpgradeSystem: Cannot select upgrade - player or manager not ready");
+            return false;
         }
 
-        return availableKeys;
+        if (config == null)
+        {
+            Debug.LogError("UpgradeSystem: Cannot select null upgrade config");
+            return false;
+        }
+
+        return upgradeManager.ApplyUpgrade(config);
     }
 
-    private List<Upgrade> SelectRandomUpgrades(List<string> availableKeys, int count)
+    public bool SelectUpgrade(int optionIndex, List<UpgradeConfig> options)
     {
-        var options = new List<Upgrade>();
-        int actualCount = Mathf.Min(count, availableKeys.Count);
-
-        for (int i = 0; i < actualCount; i++)
+        if (options == null || optionIndex < 0 || optionIndex >= options.Count)
         {
-            if (availableKeys.Count == 0) break;
-
-            int randomIndex = UnityEngine.Random.Range(0, availableKeys.Count);
-            string selectedKey = availableKeys[randomIndex];
-            availableKeys.RemoveAt(randomIndex);
-
-            var upgradeOption = CreateUpgradeOption(selectedKey);
-            options.Add(upgradeOption);
+            Debug.LogError($"UpgradeSystem: Invalid option index {optionIndex} for {options?.Count} options");
+            return false;
         }
 
-        return options;
-    }
-
-    private Upgrade CreateUpgradeOption(string upgradeId)
-    {
-        var baseUpgrade = availableUpgrades[upgradeId];
-        var upgradeOption = new Upgrade(
-            baseUpgrade.id,
-            baseUpgrade.name,
-            baseUpgrade.description,
-            baseUpgrade.type,
-            baseUpgrade.value,
-            baseUpgrade.maxLevel
-        );
-
-        if (playerUpgrades.TryGetValue(upgradeId, out var existingUpgrade))
-        {
-            upgradeOption.currentLevel = existingUpgrade.currentLevel;
-        }
-
-        return upgradeOption;
-    }
-
-    public void SelectUpgrade(Upgrade selectedUpgrade)
-    {
-        if (selectedUpgrade == null)
-        {
-            Debug.LogError("Selected upgrade is null!");
-            return;
-        }
-
-        UpdatePlayerUpgrade(selectedUpgrade);
-        ApplyUpgradeToPlayer(selectedUpgrade);
-        OnUpgradeSelected?.Invoke(selectedUpgrade);
-    }
-
-    private void UpdatePlayerUpgrade(Upgrade selectedUpgrade)
-    {
-        if (playerUpgrades.TryGetValue(selectedUpgrade.id, out var existingUpgrade))
-        {
-            existingUpgrade.currentLevel++;
-        }
-        else
-        {
-            var newUpgrade = new Upgrade(
-                selectedUpgrade.id,
-                selectedUpgrade.name,
-                selectedUpgrade.description,
-                selectedUpgrade.type,
-                selectedUpgrade.value,
-                selectedUpgrade.maxLevel
-            );
-            newUpgrade.currentLevel = 1;
-            playerUpgrades[selectedUpgrade.id] = newUpgrade;
-        }
-    }
-
-    private void ApplyUpgradeToPlayer(Upgrade upgrade)
-    {
-        var player = PlayerFinder.FindPlayer();
-
-        if (player == null)
-        {
-            Debug.LogError("Player not found! Cannot apply upgrade.");
-            return;
-        }
-
-        var upgradeApplier = new UpgradeApplier(player);
-        upgradeApplier.ApplyUpgrade(upgrade);
-
-        WebGLHelper.TriggerHapticFeedback("medium");
+        return SelectUpgrade(options[optionIndex]);
     }
 
     public float GetUpgradeMultiplier(UpgradeType type)
     {
-        float totalMultiplier = 1f;
+        if (!EnsurePlayerAndManagerReady())
+            return 1f;
 
-        foreach (var upgrade in playerUpgrades.Values)
-        {
-            if (upgrade.type == type)
-            {
-                totalMultiplier += upgrade.value * upgrade.currentLevel;
-            }
-        }
-
-        return totalMultiplier;
+        return upgradeManager.GetUpgradeMultiplier(type);
     }
 
-    public Dictionary<string, Upgrade> GetPlayerUpgrades() =>
-        new Dictionary<string, Upgrade>(playerUpgrades);
+    public float GetUpgradeBonus(UpgradeType type)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return 0f;
 
-    public bool HasUpgrade(string upgradeId) =>
-        playerUpgrades.ContainsKey(upgradeId);
+        return upgradeManager.GetUpgradeBonus(type);
+    }
 
-    public int GetUpgradeLevel(string upgradeId) =>
-        playerUpgrades.TryGetValue(upgradeId, out var upgrade) ? upgrade.currentLevel : 0;
+    public PlayerUpgrade GetUpgrade(string upgradeId)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return null;
+
+        return upgradeManager.GetUpgrade(upgradeId);
+    }
+
+    public List<PlayerUpgrade> GetUpgradesByType(UpgradeType type)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return new List<PlayerUpgrade>();
+
+        return upgradeManager.GetUpgradesByType(type);
+    }
+
+    public List<PlayerUpgrade> GetUpgradesByCategory(UpgradeCategory category)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return new List<PlayerUpgrade>();
+
+        return upgradeManager.GetUpgradesByCategory(category);
+    }
+
+    public List<PlayerUpgrade> GetUpgradesByRarity(UpgradeRarity rarity)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return new List<PlayerUpgrade>();
+
+        return upgradeManager.GetUpgradesByRarity(rarity);
+    }
+
+    public bool HasUpgrade(string upgradeId)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return false;
+
+        return upgradeManager.HasUpgrade(upgradeId);
+    }
+
+    public int GetUpgradeLevel(string upgradeId)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return 0;
+
+        return upgradeManager.GetUpgradeLevel(upgradeId);
+    }
+
+    public bool CanApplyUpgrade(UpgradeConfig config)
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return false;
+
+        return upgradeManager.CanApplyUpgrade(config);
+    }
 
     public void ResetUpgrades()
     {
-        playerUpgrades.Clear();
+        if (EnsurePlayerAndManagerReady())
+        {
+            upgradeManager.ResetAllUpgrades();
+        }
+    }
+
+    public void RefreshAllEffects()
+    {
+        if (EnsurePlayerAndManagerReady())
+        {
+            upgradeManager.RefreshAllEffects();
+        }
+    }
+
+    public UpgradeStatistics GetStatistics()
+    {
+        if (!EnsurePlayerAndManagerReady())
+            return new UpgradeStatistics();
+
+        return upgradeManager.GetStatistics();
     }
 
     public string GetUpgradesSummary()
     {
-        if (playerUpgrades.Count == 0)
+        if (!EnsurePlayerAndManagerReady())
             return "No upgrades acquired";
 
-        var summary = "Current Upgrades:\n";
-        foreach (var upgrade in playerUpgrades.Values)
-        {
-            summary += $"- {upgrade.name} Lv.{upgrade.currentLevel}\n";
-        }
-
-        return summary.TrimEnd('\n');
+        return upgradeManager.GetUpgradesSummary();
     }
+
+    public string GetDatabaseInfo()
+    {
+        return upgradeDatabase?.GetDatabaseInfo() ?? "No database loaded";
+    }
+
+    public bool IsDatabaseLoaded() => isDatabaseLoaded && upgradeDatabase != null;
+
+    public bool IsPlayerFound() => isPlayerFound && playerObject != null;
+
+    public bool IsFullyReady() => IsDatabaseLoaded() && IsPlayerFound() && upgradeManager != null;
 
     public void Cleanup()
     {
-        ResetUpgrades();
-        availableUpgrades.Clear();
+        if (upgradeManager != null)
+        {
+            upgradeManager.OnUpgradeAdded -= HandleUpgradeAdded;
+            upgradeManager.OnUpgradeLeveledUp -= HandleUpgradeLeveledUp;
+            upgradeManager.OnUpgradesReset -= HandleUpgradesReset;
+            upgradeManager.Cleanup();
+            upgradeManager = null;
+        }
+
+        playerObject = null;
+        upgradeDatabase = null;
+        isDatabaseLoaded = false;
+        isPlayerFound = false;
+
         OnUpgradeOptionsGenerated = null;
-        OnUpgradeSelected = null;
-    }
-}
-
-public static class PlayerFinder
-{
-    public static GameObject FindPlayer()
-    {
-        if (ServiceLocator.TryGet<GameObject>(out var player) && player != null)
-            return player;
-
-        player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
-            return player;
-
-        var playerHealth = UnityEngine.Object.FindObjectOfType<PlayerHealth>();
-        if (playerHealth != null)
-            return playerHealth.gameObject;
-
-        var playerCombat = UnityEngine.Object.FindObjectOfType<PlayerCombat>();
-        if (playerCombat != null)
-            return playerCombat.gameObject;
-
-        var playerMovement = UnityEngine.Object.FindObjectOfType<PlayerMovement>();
-        if (playerMovement != null)
-            return playerMovement.gameObject;
-
-        return null;
-    }
-}
-
-public class UpgradeApplier
-{
-    private readonly GameObject player;
-    private readonly PlayerCombat combat;
-    private readonly PlayerMovement movement;
-    private readonly PlayerHealth health;
-
-    public UpgradeApplier(GameObject player)
-    {
-        this.player = player;
-        combat = player.GetComponent<PlayerCombat>();
-        movement = player.GetComponent<PlayerMovement>();
-        health = player.GetComponent<PlayerHealth>();
-    }
-
-    public void ApplyUpgrade(Upgrade upgrade)
-    {
-        switch (upgrade.type)
-        {
-            case UpgradeType.Damage:
-                ApplyDamageUpgrade(upgrade.value);
-                break;
-            case UpgradeType.AttackSpeed:
-                ApplyAttackSpeedUpgrade(upgrade.value);
-                break;
-            case UpgradeType.AttackRange:
-                ApplyRangeUpgrade(upgrade.value);
-                break;
-            case UpgradeType.MoveSpeed:
-                ApplyMoveSpeedUpgrade(upgrade.value);
-                break;
-            case UpgradeType.Health:
-                ApplyHealthUpgrade(upgrade.value);
-                break;
-            case UpgradeType.HealthRegen:
-                ApplyHealthRegenUpgrade(upgrade.value);
-                break;
-            case UpgradeType.ExperienceMultiplier:
-                ApplyExperienceUpgrade(upgrade.value);
-                break;
-            case UpgradeType.CriticalChance:
-            case UpgradeType.CriticalDamage:
-                ApplyCriticalUpgrade(upgrade);
-                break;
-        }
-    }
-
-    private void ApplyDamageUpgrade(float value)
-    {
-        combat?.UpgradeDamage(1f + value);
-    }
-
-    private void ApplyAttackSpeedUpgrade(float value)
-    {
-        combat?.UpgradeAttackSpeed(1f + value);
-    }
-
-    private void ApplyRangeUpgrade(float value)
-    {
-        combat?.UpgradeRange(1f + value);
-    }
-
-    private void ApplyMoveSpeedUpgrade(float value)
-    {
-        movement?.SetMoveSpeed(movement.GetMoveSpeed() * (1f + value));
-    }
-
-    private void ApplyHealthUpgrade(float value)
-    {
-        if (health != null)
-        {
-            var newMaxHealth = 100f * (1f + value);
-            health.Heal(newMaxHealth - 100f);
-        }
-    }
-
-    private void ApplyHealthRegenUpgrade(float value)
-    {
-    }
-
-    private void ApplyExperienceUpgrade(float value)
-    {
-    }
-
-    private void ApplyCriticalUpgrade(Upgrade upgrade)
-    {
+        OnUpgradeApplied = null;
+        OnUpgradeLeveledUp = null;
+        OnUpgradesReset = null;
     }
 }

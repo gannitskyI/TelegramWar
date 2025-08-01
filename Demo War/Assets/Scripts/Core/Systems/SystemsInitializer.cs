@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 public class SystemsInitializer
 {
@@ -14,7 +15,6 @@ public class SystemsInitializer
     {
         Debug.Log("SystemsInitializer: Starting initialization...");
 
-        // Очищаем старые системы если есть
         if (systems.Count > 0)
         {
             Debug.Log("SystemsInitializer: Clearing old systems...");
@@ -24,7 +24,6 @@ public class SystemsInitializer
             fixedUpdatableSystems.Clear();
         }
 
-        // Создаем новые системы
         systems.Add(systemFactory.Create<InputSystem>());
         systems.Add(systemFactory.Create<UISystem>());
         systems.Add(systemFactory.Create<SpawnSystem>());
@@ -49,8 +48,46 @@ public class SystemsInitializer
             Debug.Log($"SystemsInitializer: {system.GetType().Name} initialized and registered");
         }
 
+        yield return WaitForUpgradeSystemReady();
+
+        yield return InitializeSpriteCache();
+
         updateCoroutine = CoroutineRunner.StartRoutine(UpdateLoop());
         Debug.Log($"SystemsInitializer: All {systems.Count} systems initialized successfully");
+    }
+
+    private IEnumerator WaitForUpgradeSystemReady()
+    {
+        var upgradeSystem = systems.OfType<UpgradeSystem>().FirstOrDefault();
+        if (upgradeSystem != null)
+        {
+            Debug.Log("SystemsInitializer: Waiting for UpgradeSystem database to load...");
+
+            var timeout = 0f;
+            var maxTimeout = 10f;
+
+            while (!upgradeSystem.IsDatabaseLoaded() && timeout < maxTimeout)
+            {
+                timeout += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            if (timeout >= maxTimeout)
+            {
+                Debug.LogWarning("SystemsInitializer: UpgradeSystem database load timeout");
+            }
+            else
+            {
+                Debug.Log("SystemsInitializer: UpgradeSystem database loaded successfully");
+            }
+        }
+    }
+
+    private IEnumerator InitializeSpriteCache()
+    {
+        Debug.Log("SystemsInitializer: Initializing SpriteCache...");
+        SpriteCache.Initialize();
+        yield return null;
     }
 
     private IEnumerator UpdateLoop()
@@ -66,6 +103,7 @@ public class SystemsInitializer
         while (true)
         {
             float deltaTime = Time.deltaTime;
+
             foreach (var system in updatableSystems)
             {
                 try
@@ -74,7 +112,7 @@ public class SystemsInitializer
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"Ошибка обновления {system.GetType().Name}: {e.Message}");
+                    Debug.LogError($"Error updating {system.GetType().Name}: {e.Message}");
                 }
             }
 
@@ -86,7 +124,7 @@ public class SystemsInitializer
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"Ошибка фиксированного обновления {system.GetType().Name}: {e.Message}");
+                    Debug.LogError($"Error in fixed update {system.GetType().Name}: {e.Message}");
                 }
             }
 
@@ -96,7 +134,7 @@ public class SystemsInitializer
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"Ошибка обновления GameStateMachine: {e.Message}");
+                Debug.LogError($"Error updating GameStateMachine: {e.Message}");
             }
 
             yield return null;
@@ -107,7 +145,7 @@ public class SystemsInitializer
     {
         if (system == null)
         {
-            Debug.LogError("Нельзя добавить null систему");
+            Debug.LogError("Cannot add null system");
             yield break;
         }
 
@@ -129,11 +167,11 @@ public class SystemsInitializer
         var system = systems.Find(s => s.GetType() == systemType);
         if (system == null)
         {
-            Debug.LogWarning($"Система {systemType.Name} не найдена для удаления");
+            Debug.LogWarning($"System {systemType.Name} not found for removal");
             return;
         }
 
-        Debug.Log($"Удаление системы: {systemType.Name}");
+        Debug.Log($"Removing system: {systemType.Name}");
         systems.Remove(system);
 
         if (system is IUpdatable updatable)
@@ -143,7 +181,7 @@ public class SystemsInitializer
             fixedUpdatableSystems.Remove(fixedUpdatable);
 
         system.Cleanup();
-        Debug.Log($"Система удалена: {systemType.Name}");
+        Debug.Log($"System removed: {systemType.Name}");
     }
 
     public void Cleanup()
@@ -161,17 +199,20 @@ public class SystemsInitializer
             try
             {
                 system.Cleanup();
-                Debug.Log($"{system.GetType().Name} очищена");
+                Debug.Log($"{system.GetType().Name} cleaned up");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"Ошибка очистки {system.GetType().Name}: {e.Message}");
+                Debug.LogError($"Error cleaning up {system.GetType().Name}: {e.Message}");
             }
         }
 
         systems.Clear();
         updatableSystems.Clear();
         fixedUpdatableSystems.Clear();
+
+        SpriteCache.Cleanup();
+
         Debug.Log("SystemsInitializer: Cleanup complete");
     }
 
@@ -184,9 +225,56 @@ public class SystemsInitializer
     private IEnumerator RestartSystemsCoroutine()
     {
         Cleanup();
-        yield return new WaitForSeconds(0.1f); // Небольшая пауза
+        yield return new WaitForSeconds(0.1f);
+
+        AddressableUpgradeLoader.Instance.ClearCache();
+
         yield return InitializeAllSystems();
         Debug.Log("SystemsInitializer: Systems restarted successfully");
+    }
+
+    public bool AreAllSystemsInitialized()
+    {
+        if (systems.Count == 0) return false;
+
+        foreach (var system in systems)
+        {
+            if (system is UpgradeSystem upgradeSystem && !upgradeSystem.IsDatabaseLoaded())
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public T GetSystem<T>() where T : class, IInitializable
+    {
+        return systems.OfType<T>().FirstOrDefault();
+    }
+
+    public string GetSystemsStatus()
+    {
+        var status = $"Systems Status ({systems.Count} total):\n";
+
+        foreach (var system in systems.OrderBy(s => s.InitializationOrder))
+        {
+            var systemName = system.GetType().Name;
+            var isReady = "Ready";
+
+            if (system is UpgradeSystem upgradeSystem && !upgradeSystem.IsDatabaseLoaded())
+            {
+                isReady = "Database Loading...";
+            }
+
+            status += $"- {systemName}: {isReady}\n";
+        }
+
+        status += $"Updatable Systems: {updatableSystems.Count}\n";
+        status += $"Fixed Updatable Systems: {fixedUpdatableSystems.Count}\n";
+        status += $"Update Loop Active: {updateCoroutine != null}";
+
+        return status;
     }
 }
 

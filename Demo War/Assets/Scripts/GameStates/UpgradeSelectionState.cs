@@ -7,7 +7,7 @@ public class UpgradeSelectionState : GameState
     private const string UPGRADE_UI_ID = "UpgradeSelection";
     private const string GAMEPLAY_UI_ID = "GameUI";
     private UpgradeSelectionUIController upgradeUIController;
-    private List<Upgrade> currentUpgradeOptions;
+    private List<UpgradeConfig> currentUpgradeOptions; // Изменено с Upgrade на UpgradeConfig
     private GameplayState gameplayState;
 
     public UpgradeSelectionState(GameplayState currentGameplayState)
@@ -17,8 +17,7 @@ public class UpgradeSelectionState : GameState
 
     public override IEnumerator Enter()
     {
-        Debug.Log("Entering Upgrade Selection State - PAUSE ONLY");
-
+        Debug.Log("Вход в состояние выбора апгрейда - ТОЛЬКО ПАУЗА");
         if (gameplayState != null)
         {
             gameplayState.Pause();
@@ -27,7 +26,7 @@ public class UpgradeSelectionState : GameState
         var uiSystem = ServiceLocator.Get<UISystem>();
         if (uiSystem == null)
         {
-            Debug.LogError("UISystem not found! Cannot show upgrade selection.");
+            Debug.LogError("UISystem не найден! Невозможно отобразить выбор апгрейда.");
             yield break;
         }
 
@@ -38,7 +37,6 @@ public class UpgradeSelectionState : GameState
 
         upgradeUIController = new UpgradeSelectionUIController();
         uiSystem.RegisterUIController(UPGRADE_UI_ID, upgradeUIController);
-
         GenerateUpgradeOptions();
         uiSystem.ShowUI(UPGRADE_UI_ID);
 
@@ -47,7 +45,7 @@ public class UpgradeSelectionState : GameState
             inputReader.DisableAllInput();
         }
 
-        Debug.Log("Upgrade Selection State entered - game is paused");
+        Debug.Log("Состояние выбора апгрейда активировано - игра приостановлена");
         yield return null;
     }
 
@@ -60,33 +58,23 @@ public class UpgradeSelectionState : GameState
         }
         else
         {
-            Debug.LogError("UpgradeSystem not found! Creating fallback upgrades.");
-            CreateFallbackUpgrades();
+            Debug.LogError("UpgradeSystem не найден! Создание резервных апгрейдов.");
+           
         }
     }
-
-    private void CreateFallbackUpgrades()
-    {
-        currentUpgradeOptions = new List<Upgrade>
-        {
-            new Upgrade("damage_boost", "Damage Boost", "+20% damage", UpgradeType.Damage, 0.2f),
-            new Upgrade("attack_speed", "Attack Speed", "+25% attack speed", UpgradeType.AttackSpeed, 0.25f),
-            new Upgrade("health_boost", "Health Boost", "+30% max health", UpgradeType.Health, 0.3f)
-        };
-
-        upgradeUIController?.SetUpgradeOptions(currentUpgradeOptions);
-    }
+     
+     
 
     public void SelectUpgrade(int upgradeIndex)
     {
         if (currentUpgradeOptions == null || upgradeIndex < 0 || upgradeIndex >= currentUpgradeOptions.Count)
         {
-            Debug.LogError($"Invalid upgrade index: {upgradeIndex}");
+            Debug.LogError($"Недопустимый индекс апгрейда: {upgradeIndex}");
             return;
         }
 
         var selectedUpgrade = currentUpgradeOptions[upgradeIndex];
-        Debug.Log($"Selected upgrade: {selectedUpgrade.name}");
+        Debug.Log($"Выбран апгрейд: {selectedUpgrade.DisplayName}");
 
         if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
@@ -100,7 +88,6 @@ public class UpgradeSelectionState : GameState
     private IEnumerator ReturnToGameplayAfterDelay(float delay)
     {
         yield return new WaitForSecondsRealtime(delay);
-
         var stateMachine = ServiceLocator.Get<GameStateMachine>();
         if (stateMachine != null && gameplayState != null)
         {
@@ -110,14 +97,12 @@ public class UpgradeSelectionState : GameState
 
     public override IEnumerator Exit()
     {
-        Debug.Log("Exiting Upgrade Selection State - RESUME GAME");
-
+        Debug.Log("Выход из состояния выбора апгрейда - ВОЗОБНОВЛЕНИЕ ИГРЫ");
         var uiSystem = ServiceLocator.Get<UISystem>();
         if (uiSystem != null)
         {
             uiSystem.HideUI(UPGRADE_UI_ID);
             uiSystem.UnregisterUIController(UPGRADE_UI_ID);
-
             if (uiSystem.GetUIController<GameplayUIController>(GAMEPLAY_UI_ID) != null)
             {
                 uiSystem.ShowUI(GAMEPLAY_UI_ID);
@@ -136,8 +121,7 @@ public class UpgradeSelectionState : GameState
 
         upgradeUIController = null;
         currentUpgradeOptions = null;
-
-        Debug.Log("Game resumed from upgrade selection");
+        Debug.Log("Игра возобновлена из состояния выбора апгрейда");
         yield return null;
     }
 

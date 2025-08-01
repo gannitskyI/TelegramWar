@@ -16,23 +16,28 @@ public class GamePauseManager
     }
 
     private bool isPaused = false;
-    private List<Upgrade> currentUpgradeOptions;
+    private List<UpgradeConfig> currentUpgradeOptions;
     private UpgradeSelectionUIController upgradeUIController;
     private const string UPGRADE_UI_ID = "UpgradeSelection";
     private const string GAMEPLAY_UI_ID = "GameUI";
 
     public bool IsPaused => isPaused;
 
-    public void ShowUpgradeSelection(List<Upgrade> upgradeOptions)
+    public void ShowUpgradeSelection(List<UpgradeConfig> upgradeOptions)
     {
         if (isPaused)
         {
-            Debug.LogWarning("Game is already paused for upgrade selection");
+            Debug.LogWarning("Game already paused for upgrade selection");
             return;
         }
 
-        Debug.Log("Pausing game for upgrade selection - NO STATE CHANGE");
+        if (upgradeOptions == null || upgradeOptions.Count == 0)
+        {
+            Debug.LogError("Cannot show upgrade selection: no upgrade options provided!");
+            return;
+        }
 
+        Debug.Log($"Showing upgrade selection with {upgradeOptions.Count} options");
         isPaused = true;
         currentUpgradeOptions = upgradeOptions;
 
@@ -53,14 +58,17 @@ public class GamePauseManager
         {
             inputReader.DisableAllInput();
         }
-
-        Debug.Log("Game systems paused - objects remain intact");
     }
 
     private void ShowUpgradeUI()
     {
         var uiSystem = ServiceLocator.Get<UISystem>();
-        if (uiSystem == null) return;
+        if (uiSystem == null)
+        {
+            Debug.LogError("UISystem not found! Cannot show upgrade UI.");
+            ResumeGame();
+            return;
+        }
 
         if (uiSystem.IsUIActive(GAMEPLAY_UI_ID))
         {
@@ -71,26 +79,36 @@ public class GamePauseManager
         upgradeUIController.OnUpgradeSelected += OnUpgradeSelected;
 
         uiSystem.RegisterUIController(UPGRADE_UI_ID, upgradeUIController);
+
         upgradeUIController.SetUpgradeOptions(currentUpgradeOptions);
         uiSystem.ShowUI(UPGRADE_UI_ID);
 
-        Debug.Log("Upgrade UI shown - gameplay UI hidden but not destroyed");
+        Debug.Log("Upgrade UI displayed successfully");
     }
 
     private void OnUpgradeSelected(int upgradeIndex)
     {
         if (currentUpgradeOptions == null || upgradeIndex < 0 || upgradeIndex >= currentUpgradeOptions.Count)
         {
-            Debug.LogError($"Invalid upgrade index: {upgradeIndex}");
+            Debug.LogError($"Invalid upgrade selection: index {upgradeIndex} for {currentUpgradeOptions?.Count ?? 0} options");
+            ResumeGame();
             return;
         }
 
         var selectedUpgrade = currentUpgradeOptions[upgradeIndex];
-        Debug.Log($"Selected upgrade: {selectedUpgrade.name}");
+        Debug.Log($"Upgrade selected: {selectedUpgrade.DisplayName}");
 
         if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
-            upgradeSystem.SelectUpgrade(selectedUpgrade);
+            bool success = upgradeSystem.SelectUpgrade(selectedUpgrade);
+            if (!success)
+            {
+                Debug.LogError("Failed to apply selected upgrade!");
+            }
+        }
+        else
+        {
+            Debug.LogError("UpgradeSystem not found! Cannot apply upgrade.");
         }
 
         WebGLHelper.TriggerHapticFeedback("medium");
@@ -111,15 +129,13 @@ public class GamePauseManager
             return;
         }
 
-        Debug.Log("Resuming game - NO STATE CHANGE");
+        Debug.Log("Resuming game from upgrade selection");
 
         HideUpgradeUI();
         UnpauseGame();
 
         isPaused = false;
         currentUpgradeOptions = null;
-
-        Debug.Log("Game resumed - all objects preserved");
     }
 
     private void HideUpgradeUI()
@@ -141,7 +157,6 @@ public class GamePauseManager
         }
 
         upgradeUIController = null;
-        Debug.Log("Upgrade UI hidden - gameplay UI restored");
     }
 
     private void UnpauseGame()
@@ -159,8 +174,6 @@ public class GamePauseManager
         }
 
         ReactivateExistingEnemies();
-
-        Debug.Log("Game systems resumed");
     }
 
     private void ReactivateExistingEnemies()
@@ -171,7 +184,6 @@ public class GamePauseManager
             if (enemy != null && enemy.gameObject.activeInHierarchy)
             {
                 enemy.enabled = true;
-
                 var enemyRb = enemy.GetComponent<Rigidbody2D>();
                 if (enemyRb != null)
                 {
@@ -186,7 +198,6 @@ public class GamePauseManager
             if (projectile != null && projectile.gameObject.activeInHierarchy)
             {
                 projectile.enabled = true;
-
                 var projectileRb = projectile.GetComponent<Rigidbody2D>();
                 if (projectileRb != null)
                 {
@@ -194,8 +205,6 @@ public class GamePauseManager
                 }
             }
         }
-
-        Debug.Log($"Reactivated {allEnemies.Length} enemies and {allProjectiles.Length} projectiles");
     }
 
     public void Cleanup()
@@ -204,7 +213,6 @@ public class GamePauseManager
         {
             ResumeGame();
         }
-
         instance = null;
     }
 }

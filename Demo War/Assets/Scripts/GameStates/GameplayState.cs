@@ -35,9 +35,11 @@ public class GameplayState : PausableGameState
 
             if (playerInstance != null)
             {
-                Object.Destroy(playerInstance);
+                UnityEngine.Object.Destroy(playerInstance);
                 playerInstance = null;
             }
+
+            ServiceLocator.Unregister<GameObject>();
         }
 
         if (wasInitialized && !forceReset)
@@ -79,10 +81,46 @@ public class GameplayState : PausableGameState
 
         playerCreated = true;
         wasInitialized = true;
+
+        RegisterPlayerInServiceLocator();
+        NotifyUpgradeSystemPlayerReady();
         ActivateGameplaySystems();
         EnableGameplayInput();
 
         Debug.Log("GameplayState fully initialized");
+    }
+
+    private void RegisterPlayerInServiceLocator()
+    {
+        if (playerInstance != null)
+        {
+            ServiceLocator.Unregister<GameObject>();
+            ServiceLocator.Register<GameObject>(playerInstance);
+            Debug.Log($"Player registered in ServiceLocator: {playerInstance.name}");
+
+            var playerHealth = playerInstance.GetComponent<PlayerHealth>();
+            var playerMovement = playerInstance.GetComponent<PlayerMovement>();
+            var playerCombat = playerInstance.GetComponent<PlayerCombat>();
+
+            Debug.Log($"Player components: Health={playerHealth != null}, Movement={playerMovement != null}, Combat={playerCombat != null}");
+        }
+    }
+
+    private void NotifyUpgradeSystemPlayerReady()
+    {
+        if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
+        {
+            Debug.Log("Notifying UpgradeSystem that player is ready");
+
+            if (upgradeSystem.IsDatabaseLoaded())
+            {
+                Debug.Log("UpgradeSystem: Both database and player are now ready!");
+            }
+            else
+            {
+                Debug.LogWarning("UpgradeSystem: Player ready but database still loading");
+            }
+        }
     }
 
     protected override void OnPause()
@@ -195,15 +233,14 @@ public class GameplayState : PausableGameState
             if (playerTask.Result != null)
             {
                 playerInstance = playerTask.Result;
-                Debug.Log($"Player created: {playerInstance.name}");
+                Debug.Log($"Player created from Addressables: {playerInstance.name}");
 
                 SetupPlayerComponents();
-                RegisterPlayer();
                 yield break;
             }
         }
 
-        Debug.LogError("Failed to create player");
+        Debug.LogError("Failed to create player from Addressables");
     }
 
     private Vector3 GetPlayerSpawnPosition()
@@ -225,7 +262,7 @@ public class GameplayState : PausableGameState
         var rb3d = playerInstance.GetComponent<Rigidbody>();
         if (rb3d != null)
         {
-            Object.DestroyImmediate(rb3d);
+            UnityEngine.Object.DestroyImmediate(rb3d);
         }
 
         var rb2d = playerInstance.GetComponent<Rigidbody2D>();
@@ -287,17 +324,6 @@ public class GameplayState : PausableGameState
 
         yield return component.Initialize();
         Debug.Log($"Component {componentName} initialized");
-    }
-
-    private void RegisterPlayer()
-    {
-        if (playerInstance != null)
-        {
-            ServiceLocator.Unregister<GameObject>();
-            ServiceLocator.Register<GameObject>(playerInstance);
-            ServiceLocator.RegisterWeak<GameObject>(playerInstance);
-            Debug.Log($"Player registered: {playerInstance.name}");
-        }
     }
 
     private void ActivateGameplaySystems()
@@ -410,7 +436,7 @@ public class GameplayState : PausableGameState
             }
             else
             {
-                Object.Destroy(playerInstance);
+                UnityEngine.Object.Destroy(playerInstance);
             }
             playerInstance = null;
         }
