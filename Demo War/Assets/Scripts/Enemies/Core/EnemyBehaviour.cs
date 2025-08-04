@@ -41,7 +41,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
             if (PlayerLayer == -1) PlayerLayer = LayerMask.NameToLayer("Default");
             layersInitialized = true;
         }
-
         CacheComponents();
         SetupDamageReceiver();
     }
@@ -50,13 +49,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     {
         cachedRigidbody = GetComponent<Rigidbody2D>();
         cachedRenderer = GetComponent<SpriteRenderer>();
-
         if (cachedRigidbody != null)
         {
             cachedRigidbody.gravityScale = 0f;
             cachedRigidbody.linearDamping = 2f;
         }
-
         var collider = GetComponent<Collider2D>();
         if (collider != null)
         {
@@ -75,18 +72,12 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 
     public void Initialize(EnemyConfig config, System.Action onReturnToPool = null)
     {
-        if (config == null)
-        {
-            return;
-        }
-
-        this.enemyConfig = config;
+        if (config == null) return;
+        enemyConfig = config;
         this.onReturnToPool = onReturnToPool;
-
         currentHealth = config.maxHealth;
         currentShieldHealth = config.hasShield ? config.shieldHealth : 0f;
         moveSpeed = config.moveSpeed;
-
         isInitialized = true;
         hasExploded = false;
         isRetreating = false;
@@ -95,33 +86,20 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         isInBurstMode = false;
         movementTimer = 0f;
         healthRegenTimer = 0f;
-
         SetupVisuals();
-        CachePlayerReference();
-
+        CachePlayerReference(true);
         transform.localScale = Vector3.one * config.scale;
-
         try { gameObject.tag = "Enemy"; } catch { }
-
         int enemyLayer = LayerMask.NameToLayer("Enemy");
         if (enemyLayer != -1) gameObject.layer = enemyLayer;
-
         EnemyRegistry.Instance.RegisterEnemy(damageReceiver);
         gameObject.SetActive(true);
     }
 
     public void InitializeForPool(EnemyConfig config = null)
     {
-        if (config != null)
-        {
-            this.enemyConfig = config;
-        }
-
-        if (enemyConfig == null)
-        {
-            return;
-        }
-
+        if (config != null) enemyConfig = config;
+        if (enemyConfig == null) return;
         currentHealth = enemyConfig.maxHealth;
         currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
         moveSpeed = enemyConfig.moveSpeed;
@@ -132,13 +110,8 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 
     public void ResetForReuse(System.Action onReturnToPool = null)
     {
-        if (enemyConfig == null)
-        {
-            return;
-        }
-
+        if (enemyConfig == null) return;
         this.onReturnToPool = onReturnToPool;
-
         currentHealth = enemyConfig.maxHealth;
         currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
         moveSpeed = enemyConfig.moveSpeed;
@@ -149,30 +122,26 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         isInBurstMode = false;
         movementTimer = 0f;
         healthRegenTimer = 0f;
-
         SetupVisuals();
-
         if (cachedRigidbody != null)
         {
             cachedRigidbody.linearVelocity = Vector2.zero;
             cachedRigidbody.angularVelocity = 0f;
         }
-
-        CachePlayerReference();
+        CachePlayerReference(true);
         EnemyRegistry.Instance.RegisterEnemy(damageReceiver);
     }
 
     private void SetupVisuals()
     {
         if (cachedRenderer == null || enemyConfig == null) return;
-
         cachedRenderer.sprite = SpriteCache.GetEnemySprite(enemyConfig.tier, enemyConfig.enemyColor);
         cachedRenderer.sortingOrder = 5;
     }
 
-    private void CachePlayerReference()
+    private void CachePlayerReference(bool force = false)
     {
-        if (playerTransform == null)
+        if (playerTransform == null || force)
         {
             if (ServiceLocator.TryGet<GameObject>(out var playerObject))
             {
@@ -186,11 +155,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         if (!gameObject.activeSelf || !isInitialized || hasExploded || playerTransform == null || enemyConfig == null)
             return;
 
-        CachePlayerReference();
-        if (playerTransform == null) return;
-
         float distanceToPlayer = Vector2.Distance(transform.position, playerTransform.position);
-
         UpdateHealthRegeneration();
         UpdateMovement(distanceToPlayer);
         UpdateAttack(distanceToPlayer);
@@ -199,11 +164,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 
     private void UpdateMovement(float distanceToPlayer)
     {
-        if (enemyConfig.ShouldFlee(currentHealth) && !isRetreating)
-        {
-            isRetreating = true;
-        }
-
+        if (enemyConfig.ShouldFlee(currentHealth) && !isRetreating) isRetreating = true;
         Vector2 targetPosition = CalculateTargetPosition(distanceToPlayer);
         MoveTowardsTarget(targetPosition);
     }
@@ -211,13 +172,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     private void MoveTowardsTarget(Vector2 targetPosition)
     {
         if (cachedRigidbody == null) return;
-
         Vector2 currentPos = transform.position;
         Vector2 direction = (targetPosition - currentPos).normalized;
-
         float actualSpeed = isRetreating ? moveSpeed * 1.5f : moveSpeed;
         cachedRigidbody.linearVelocity = direction * actualSpeed;
-
         if (direction != Vector2.zero)
         {
             float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -229,13 +187,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     {
         Vector2 playerPos = playerTransform.position;
         Vector2 currentPos = transform.position;
-
         if (isRetreating)
         {
             Vector2 fleeDirection = (currentPos - playerPos).normalized;
             return currentPos + fleeDirection * moveSpeed * Time.deltaTime * 2f;
         }
-
         return enemyConfig.movementType switch
         {
             EnemyMovementType.DirectChase => playerPos,
@@ -249,7 +205,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     private void UpdateHealthRegeneration()
     {
         if (!enemyConfig.regeneratesHealth || currentHealth >= enemyConfig.maxHealth) return;
-
         healthRegenTimer += Time.deltaTime;
         if (healthRegenTimer >= 1f)
         {
@@ -263,12 +218,9 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         if (enemyConfig.attackType == EnemyAttackType.None ||
             !enemyConfig.IsInAttackRange(transform.position, playerTransform.position))
             return;
-
         if (!enemyConfig.canAttackWhileMoving && cachedRigidbody.linearVelocity.magnitude > 0.1f)
             return;
-
         attackTimer += Time.deltaTime;
-
         if (attackTimer >= enemyConfig.attackInterval)
         {
             PerformAttack();
@@ -286,25 +238,19 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     {
         var projectileGO = new GameObject("EnemyProjectile");
         projectileGO.transform.position = transform.position;
-
         var renderer = projectileGO.AddComponent<SpriteRenderer>();
         string spriteKey = isHoming ? "projectile_homing" : "projectile_basic";
         renderer.sprite = SpriteCache.GetSprite(spriteKey);
         renderer.sortingOrder = 10;
-
         var rb = projectileGO.AddComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.linearVelocity = direction * speed;
-
         var collider = projectileGO.AddComponent<CircleCollider2D>();
         collider.isTrigger = true;
         collider.radius = 0.15f;
-
         var projectile = projectileGO.AddComponent<EnemyProjectile>();
         projectile.Initialize(enemyConfig.attackDamage, speed, enemyConfig.projectileLifetime, isHoming, false);
-
         try { projectileGO.tag = "Enemy"; } catch { }
-
         int bulletLayer = LayerMask.NameToLayer("EnemyBullet");
         if (bulletLayer != -1) projectileGO.layer = bulletLayer;
     }
@@ -316,39 +262,28 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 
     public void TakeDamage(float damage, IDamageSource source)
     {
-        if (!isInitialized || hasExploded)
-            return;
-
-        if (source.GetTeam() == DamageTeam.Enemy)
-        {
-            return;
-        }
-
-        if (enemyConfig.immuneToPlayerBullets && source.GetTeam() == DamageTeam.Player)
-        {
-            return;
-        }
-
+        if (!isInitialized || hasExploded) return;
+        if (source.GetTeam() == DamageTeam.Enemy) return;
+        if (enemyConfig.immuneToPlayerBullets && source.GetTeam() == DamageTeam.Player) return;
         float actualDamage = enemyConfig.CalculateDamageReduction(damage);
-
         if (currentShieldHealth > 0f)
         {
             float shieldDamage = Mathf.Min(currentShieldHealth, actualDamage);
             currentShieldHealth -= shieldDamage;
             actualDamage -= shieldDamage;
         }
-
         if (actualDamage > 0f)
         {
-            float previousHealth = currentHealth;
             currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
-
-            Debug.Log($"Enemy took {actualDamage:F1} damage. Health: {previousHealth:F1} -> {currentHealth:F1}");
         }
-
         if (gameObject.activeInHierarchy)
-            StartCoroutine(DamageFlash());
-
+        {
+            if (cachedRenderer != null)
+            {
+                cachedRenderer.color = Color.white;
+                cachedRenderer.color = cachedRenderer.color;
+            }
+        }
         if (currentHealth <= 0)
         {
             Die();
@@ -362,25 +297,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         TakeDamage(damageAmount, genericSource);
     }
 
-    private IEnumerator DamageFlash()
-    {
-        if (cachedRenderer == null) yield break;
-
-        Color originalColor = cachedRenderer.color;
-        cachedRenderer.color = Color.white;
-        yield return new WaitForSeconds(0.1f);
-
-        if (cachedRenderer != null)
-        {
-            cachedRenderer.color = originalColor;
-        }
-    }
-
     private void Die()
     {
         if (hasExploded) return;
         hasExploded = true;
-
         CreateExperienceParticles();
         onReturnToPool?.Invoke();
     }
@@ -391,7 +311,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         int particleCount = Mathf.Min(3, expToDrop / 5 + 1);
         int expPerParticle = expToDrop / particleCount;
         int remainingExp = expToDrop % particleCount;
-
         for (int i = 0; i < particleCount; i++)
         {
             Vector3 particlePosition = transform.position + (Vector3)Random.insideUnitCircle * 0.5f;
@@ -403,9 +322,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     public void ResetState()
     {
         if (enemyConfig == null) return;
-
         EnemyRegistry.Instance.UnregisterEnemy(damageReceiver);
-
         currentHealth = enemyConfig.maxHealth;
         currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
         moveSpeed = enemyConfig.moveSpeed;
@@ -416,19 +333,15 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         isInBurstMode = false;
         movementTimer = 0f;
         healthRegenTimer = 0f;
-
         transform.position = Vector3.zero;
         transform.rotation = Quaternion.identity;
         transform.localScale = Vector3.one * enemyConfig.scale;
-
         SetupVisuals();
-
         if (cachedRigidbody != null)
         {
             cachedRigidbody.linearVelocity = Vector2.zero;
             cachedRigidbody.angularVelocity = 0f;
         }
-
         gameObject.SetActive(false);
         onReturnToPool = null;
     }
