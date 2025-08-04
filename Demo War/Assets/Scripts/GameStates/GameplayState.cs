@@ -25,28 +25,21 @@ public class GameplayState : PausableGameState
 
     public override IEnumerator Enter()
     {
-        Debug.Log($"GameplayState Enter - wasInitialized: {wasInitialized}, isPaused: {isPaused}, forceReset: {forceReset}");
-
         if (forceReset)
         {
-            Debug.Log("Force resetting GameplayState for restart");
             wasInitialized = false;
             isPaused = false;
-
             if (playerInstance != null)
             {
                 UnityEngine.Object.Destroy(playerInstance);
                 playerInstance = null;
             }
-
             ServiceLocator.Unregister<GameObject>();
         }
 
         if (wasInitialized && !forceReset)
         {
-            Debug.Log("Resuming existing gameplay - no recreation");
             Resume();
-
             var uiSystem = ServiceLocator.Get<UISystem>();
             if (uiSystem != null && gameplayUIController != null)
             {
@@ -58,7 +51,6 @@ public class GameplayState : PausableGameState
             yield break;
         }
 
-        Debug.Log("First time initialization of gameplay state");
         isExiting = false;
         playerCreated = false;
         gameTimer = 0f;
@@ -73,11 +65,7 @@ public class GameplayState : PausableGameState
         yield return CreatePlayer();
         if (isExiting) yield break;
 
-        if (playerInstance == null)
-        {
-            Debug.LogError("Player creation failed completely!");
-            yield break;
-        }
+        if (playerInstance == null) yield break;
 
         playerCreated = true;
         wasInitialized = true;
@@ -87,7 +75,10 @@ public class GameplayState : PausableGameState
         ActivateGameplaySystems();
         EnableGameplayInput();
 
-        Debug.Log("GameplayState fully initialized");
+        if (gameplayUIController != null)
+        {
+            gameplayUIController.SetPlayerInstance(playerInstance);
+        }
     }
 
     private void RegisterPlayerInServiceLocator()
@@ -96,13 +87,6 @@ public class GameplayState : PausableGameState
         {
             ServiceLocator.Unregister<GameObject>();
             ServiceLocator.Register<GameObject>(playerInstance);
-            Debug.Log($"Player registered in ServiceLocator: {playerInstance.name}");
-
-            var playerHealth = playerInstance.GetComponent<PlayerHealth>();
-            var playerMovement = playerInstance.GetComponent<PlayerMovement>();
-            var playerCombat = playerInstance.GetComponent<PlayerCombat>();
-
-            Debug.Log($"Player components: Health={playerHealth != null}, Movement={playerMovement != null}, Combat={playerCombat != null}");
         }
     }
 
@@ -110,61 +94,42 @@ public class GameplayState : PausableGameState
     {
         if (ServiceLocator.TryGet<UpgradeSystem>(out var upgradeSystem))
         {
-            Debug.Log("Notifying UpgradeSystem that player is ready");
-
             if (upgradeSystem.IsDatabaseLoaded())
             {
-                Debug.Log("UpgradeSystem: Both database and player are now ready!");
-            }
-            else
-            {
-                Debug.LogWarning("UpgradeSystem: Player ready but database still loading");
             }
         }
     }
 
     protected override void OnPause()
     {
-        Debug.Log("GameplayState paused - stopping systems but keeping objects");
-
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             spawnSystem.StopSpawning();
         }
-
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.DisableAllInput();
         }
-
         Time.timeScale = 0f;
     }
 
     protected override void OnResume()
     {
-        Debug.Log("GameplayState resumed - restarting systems with existing objects");
-
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             spawnSystem.StartSpawning();
         }
-
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.EnableGameplayInput();
         }
-
         Time.timeScale = 1f;
     }
 
     private IEnumerator SetupGameplayUI()
     {
         var uiSystem = ServiceLocator.Get<UISystem>();
-        if (uiSystem == null)
-        {
-            Debug.LogError("UISystem not found!");
-            yield break;
-        }
+        if (uiSystem == null) yield break;
 
         if (uiSystem.IsUIActive("MainMenu"))
         {
@@ -190,11 +155,7 @@ public class GameplayState : PausableGameState
     private IEnumerator LoadGameplayScene()
     {
         var addressableManager = ServiceLocator.Get<AddressableManager>();
-        if (addressableManager == null)
-        {
-            Debug.LogError("AddressableManager not found!");
-            yield break;
-        }
+        if (addressableManager == null) yield break;
 
         SceneManager.sceneLoaded += OnSceneLoaded;
 
@@ -209,22 +170,14 @@ public class GameplayState : PausableGameState
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        Debug.Log($"Scene loaded: {scene.name}");
     }
 
     private IEnumerator CreatePlayer()
     {
-        if (playerInstance != null)
-        {
-            Debug.Log("Player already exists, skipping creation");
-            yield break;
-        }
-
-        Debug.Log("Creating player for the first time");
+        if (playerInstance != null) yield break;
 
         Vector3 spawnPosition = GetPlayerSpawnPosition();
         var addressableManager = ServiceLocator.Get<AddressableManager>();
-
         if (addressableManager != null)
         {
             var playerTask = addressableManager.InstantiateAsync("PlayerPrefab", spawnPosition);
@@ -233,14 +186,10 @@ public class GameplayState : PausableGameState
             if (playerTask.Result != null)
             {
                 playerInstance = playerTask.Result;
-                Debug.Log($"Player created from Addressables: {playerInstance.name}");
-
                 SetupPlayerComponents();
                 yield break;
             }
         }
-
-        Debug.LogError("Failed to create player from Addressables");
     }
 
     private Vector3 GetPlayerSpawnPosition()
@@ -264,13 +213,11 @@ public class GameplayState : PausableGameState
         {
             UnityEngine.Object.DestroyImmediate(rb3d);
         }
-
         var rb2d = playerInstance.GetComponent<Rigidbody2D>();
         if (rb2d == null)
         {
             rb2d = playerInstance.AddComponent<Rigidbody2D>();
         }
-
         rb2d.gravityScale = 0f;
         rb2d.linearDamping = 5f;
         rb2d.freezeRotation = true;
@@ -278,13 +225,13 @@ public class GameplayState : PausableGameState
         var playerCombat = playerInstance.GetComponent<PlayerCombat>();
         if (playerCombat != null)
         {
-            CoroutineRunner.StartRoutine(SafeInitializeComponent(playerCombat, "PlayerCombat"));
+            CoroutineRunner.StartRoutine(SafeInitializeComponent(playerCombat));
         }
 
         var playerMovement = playerInstance.GetComponent<PlayerMovement>();
         if (playerMovement != null)
         {
-            CoroutineRunner.StartRoutine(SafeInitializeComponent(playerMovement, "PlayerMovement"));
+            CoroutineRunner.StartRoutine(SafeInitializeComponent(playerMovement));
         }
 
         var playerHealth = playerInstance.GetComponent<PlayerHealth>();
@@ -302,15 +249,7 @@ public class GameplayState : PausableGameState
             circleCollider.radius = 0.5f;
         }
 
-        try
-        {
-            playerInstance.tag = "Player";
-        }
-        catch
-        {
-            Debug.LogWarning("Could not set Player tag");
-        }
-
+        playerInstance.tag = "Player";
         int playerLayer = LayerMask.NameToLayer("Player");
         if (playerLayer != -1)
         {
@@ -318,12 +257,10 @@ public class GameplayState : PausableGameState
         }
     }
 
-    private IEnumerator SafeInitializeComponent(IInitializable component, string componentName)
+    private IEnumerator SafeInitializeComponent(IInitializable component)
     {
         if (component == null) yield break;
-
         yield return component.Initialize();
-        Debug.Log($"Component {componentName} initialized");
     }
 
     private void ActivateGameplaySystems()
@@ -331,7 +268,6 @@ public class GameplayState : PausableGameState
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             spawnSystem.StartSpawning();
-            Debug.Log("SpawnSystem activated");
         }
     }
 
@@ -340,28 +276,23 @@ public class GameplayState : PausableGameState
         if (ServiceLocator.TryGet<InputReader>(out var inputReader))
         {
             inputReader.EnableGameplayInput();
-            Debug.Log("Gameplay input enabled");
         }
     }
 
     private void OnPlayerDied()
     {
         if (isExiting || isPaused) return;
-
-        Debug.Log("Player died event triggered");
         CoroutineRunner.StartRoutine(EndGameplayAfterDelay());
     }
 
     private IEnumerator EndGameplayAfterDelay()
     {
         yield return new WaitForSeconds(1f);
-
         int finalScore = 0;
         if (ServiceLocator.TryGet<ScoreSystem>(out var scoreSystem))
         {
             finalScore = scoreSystem.GetCurrentScore();
         }
-
         var stateMachine = ServiceLocator.Get<GameStateMachine>();
         if (stateMachine != null)
         {
@@ -372,15 +303,8 @@ public class GameplayState : PausableGameState
     protected override void OnUpdate()
     {
         if (!isRoundActive || isExiting || !playerCreated) return;
-
-        if (playerInstance == null)
-        {
-            Debug.LogError("Player instance is null during gameplay!");
-            return;
-        }
-
+        if (playerInstance == null) return;
         gameTimer += Time.deltaTime;
-
         if (gameplayUIController != null)
         {
             gameplayUIController.UpdateTimer(gameTimer);
@@ -389,8 +313,6 @@ public class GameplayState : PausableGameState
 
     public override IEnumerator Exit()
     {
-        Debug.Log("GameplayState Exit called");
-
         isExiting = true;
         isRoundActive = false;
 

@@ -4,12 +4,18 @@ using System.Collections.Generic;
 
 public class PlayerHealth : MonoBehaviour, IDamageable
 {
-    [SerializeField] private float maxHealth = 100f;
     private float currentHealth;
+    private float maxHealth;
     private bool isDead;
+
+    [SerializeField] private PlayerStats playerStats;
 
     public event Action<float, float> OnHealthChanged;
     public event Action OnPlayerDied;
+
+    private List<DamageRecord> damageHistory = new List<DamageRecord>();
+    private float damageTrackingDuration = 10f;
+    private float totalDamageTaken = 0f;
 
     private struct DamageRecord
     {
@@ -31,10 +37,6 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         }
     }
 
-    private List<DamageRecord> damageHistory = new List<DamageRecord>();
-    private float damageTrackingDuration = 10f;
-    private float totalDamageTaken = 0f;
-
     private void Awake()
     {
         var existingDamageReceiver = GetComponent<PlayerDamageReceiver>();
@@ -51,9 +53,31 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     private void Start()
     {
+        if (playerStats == null)
+        {
+            ServiceLocator.TryGet<PlayerStats>(out playerStats);
+        }
+
+        if (playerStats == null)
+        {
+            Debug.LogError("PlayerStats не найден! Ќазначь ScriptableObject через инспектор или через ServiceLocator.");
+            enabled = false;
+            return;
+        }
+
+        maxHealth = playerStats.BaseMaxHealth;
         currentHealth = maxHealth;
         isDead = false;
-        totalDamageTaken = 0f;
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+        playerStats.OnStatsChanged += OnStatsChanged;
+    }
+
+    private void OnStatsChanged(PlayerStats stats)
+    {
+        maxHealth = stats.FinalMaxHealth;
+        if (currentHealth > maxHealth)
+            currentHealth = maxHealth;
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -61,23 +85,17 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     {
         if (isDead || damage < 0) return;
         if (source.GetTeam() == DamageTeam.Player) return;
-
         float actualDamage = Mathf.Min(damage, currentHealth);
-        currentHealth = Mathf.Max(0, currentHealth - damage);
+        currentHealth = Mathf.Max(0, currentHealth - actualDamage);
         totalDamageTaken += actualDamage;
-        RecordDamage(new DamageRecord(actualDamage, source));
+        damageHistory.Add(new DamageRecord(actualDamage, source));
+        damageHistory.RemoveAll(r => Time.time - r.timestamp > damageTrackingDuration);
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
         if (currentHealth <= 0 && !isDead)
         {
             isDead = true;
             OnPlayerDied?.Invoke();
         }
-    }
-
-    private void RecordDamage(DamageRecord record)
-    {
-        damageHistory.Add(record);
-        damageHistory.RemoveAll(r => Time.time - r.timestamp > damageTrackingDuration);
     }
 
     public void Heal(float amount)
@@ -89,6 +107,7 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     public void ResetHealth()
     {
+        maxHealth = playerStats.BaseMaxHealth;
         currentHealth = maxHealth;
         isDead = false;
         totalDamageTaken = 0f;
@@ -106,6 +125,10 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     private void OnDestroy()
     {
+        if (playerStats != null)
+        {
+            playerStats.OnStatsChanged -= OnStatsChanged;
+        }
         this.CleanupEvents();
     }
 }

@@ -14,7 +14,7 @@ public class PlayerStats : ScriptableObject
     [SerializeField] private float baseMoveSpeed = 5f;
 
     [Header("Base Health Stats")]
-    [SerializeField] private float baseMaxHealth = 100f;
+    [SerializeField] public float baseMaxHealth = 100f;
     [SerializeField] private float baseHealthRegen = 0f;
 
     [Header("Runtime Multipliers")]

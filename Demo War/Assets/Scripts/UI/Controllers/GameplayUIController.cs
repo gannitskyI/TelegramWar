@@ -25,21 +25,26 @@ public class GameplayUIController : BaseUIController
 
     private bool isInitialized = false;
 
-    private float playerSearchTimer = 0f;
-    private const float PLAYER_SEARCH_INTERVAL = 0.5f;
-
     public GameplayUIController() : base("GameUI") { }
+
+    public void SetPlayerInstance(GameObject player)
+    {
+        if (player != null)
+        {
+            playerHealth = player.GetComponent<PlayerHealth>();
+        }
+        RefreshAllDisplays();
+        SubscribeToEvents();
+    }
 
     protected override void OnShow()
     {
         base.OnShow();
-
         if (!isInitialized)
         {
             InitializeUIController();
             isInitialized = true;
         }
-
         SubscribeToEvents();
         RefreshAllDisplays();
     }
@@ -48,89 +53,19 @@ public class GameplayUIController : BaseUIController
     {
         ServiceLocator.TryGet<ScoreSystem>(out scoreSystem);
         ServiceLocator.TryGet<SpawnSystem>(out spawnSystem);
-
-        FindPlayerHealth();
-        playerSearchTimer = 0f;
-    }
-
-    private void FindPlayerHealth()
-    {
-        if (playerHealth != null)
-            return;
-
-        Debug.Log("GameplayUIController: Searching for PlayerHealth...");
-
-        if (ServiceLocator.TryGet<GameObject>(out var player) && player != null)
-        {
-            playerHealth = player.GetComponent<PlayerHealth>();
-            if (playerHealth != null)
-            {
-                Debug.Log($"GameplayUIController: Found PlayerHealth via ServiceLocator on {player.name}");
-                return;
-            }
-            else
-            {
-                Debug.LogWarning($"GameplayUIController: Player object found ({player.name}) but no PlayerHealth component!");
-            }
-        }
-        else
-        {
-            Debug.LogWarning("GameplayUIController: No player object in ServiceLocator");
-        }
-
-        var allPlayers = UnityEngine.Object.FindObjectsOfType<PlayerHealth>();
-        if (allPlayers.Length > 0)
-        {
-            playerHealth = allPlayers[0];
-            Debug.Log($"GameplayUIController: Found PlayerHealth via FindObjectsOfType on {playerHealth.gameObject.name}");
-
-            if (!ServiceLocator.IsRegistered<GameObject>())
-            {
-                ServiceLocator.Register<GameObject>(playerHealth.gameObject);
-                Debug.Log("GameplayUIController: Registered player in ServiceLocator");
-            }
-            return;
-        }
-
-        var playerByTag = GameObject.FindWithTag("Player");
-        if (playerByTag != null)
-        {
-            playerHealth = playerByTag.GetComponent<PlayerHealth>();
-            if (playerHealth != null)
-            {
-                Debug.Log($"GameplayUIController: Found PlayerHealth via Player tag on {playerByTag.name}");
-
-                if (!ServiceLocator.IsRegistered<GameObject>())
-                {
-                    ServiceLocator.Register<GameObject>(playerByTag);
-                    Debug.Log("GameplayUIController: Registered player in ServiceLocator");
-                }
-                return;
-            }
-            else
-            {
-                Debug.LogWarning($"GameplayUIController: Player tag found ({playerByTag.name}) but no PlayerHealth component!");
-            }
-        }
-
-        Debug.LogWarning("GameplayUIController: PlayerHealth not found by any method!");
     }
 
     private void SubscribeToEvents()
     {
         UnsubscribeFromEvents();
-
         if (playerHealth != null)
         {
             playerHealth.OnHealthChanged += OnPlayerHealthChanged;
             isSubscribedToHealthEvents = true;
-            Debug.Log("GameplayUIController: Subscribed to health events");
-
             currentHealth = playerHealth.GetCurrentHealth();
             maxHealth = playerHealth.GetMaxHealth();
             UpdateHealthDisplay();
         }
-
         if (scoreSystem != null)
         {
             scoreSystem.OnLevelUp += OnLevelChanged;
@@ -144,7 +79,6 @@ public class GameplayUIController : BaseUIController
             playerHealth.OnHealthChanged -= OnPlayerHealthChanged;
             isSubscribedToHealthEvents = false;
         }
-
         if (scoreSystem != null)
         {
             scoreSystem.OnLevelUp -= OnLevelChanged;
@@ -156,7 +90,6 @@ public class GameplayUIController : BaseUIController
         currentHealth = newHealth;
         maxHealth = newMaxHealth;
         UpdateHealthDisplay();
-        Debug.Log($"Health changed: {newHealth}/{newMaxHealth}");
     }
 
     private void OnLevelChanged()
@@ -196,29 +129,15 @@ public class GameplayUIController : BaseUIController
 
     private void RefreshHealthDisplay()
     {
-        if (playerHealth == null)
-        {
-            FindPlayerHealth();
-        }
-
         if (playerHealth != null)
         {
             currentHealth = playerHealth.GetCurrentHealth();
             maxHealth = playerHealth.GetMaxHealth();
-            Debug.Log($"Refreshing health display: {currentHealth}/{maxHealth}");
-
             if (!isSubscribedToHealthEvents)
             {
                 SubscribeToEvents();
             }
         }
-        else
-        {
-            currentHealth = 100f;
-            maxHealth = 100f;
-            Debug.LogWarning("PlayerHealth still not found, using default values");
-        }
-
         UpdateHealthDisplay();
     }
 
@@ -227,17 +146,6 @@ public class GameplayUIController : BaseUIController
     protected override void OnUpdate(float deltaTime)
     {
         base.OnUpdate(deltaTime);
-
-        playerSearchTimer += deltaTime;
-        if (playerHealth == null && playerSearchTimer >= PLAYER_SEARCH_INTERVAL)
-        {
-            FindPlayerHealth();
-            if (playerHealth != null)
-            {
-                SubscribeToEvents();
-            }
-            playerSearchTimer = 0f;
-        }
 
         if (scoreSystem != null)
         {
@@ -285,7 +193,7 @@ public class GameplayUIController : BaseUIController
         }
         else
         {
-            SetText(HEALTH_TEXT, "Health: Searching...");
+            SetText(HEALTH_TEXT, "Health: Waiting...");
         }
     }
 
@@ -374,8 +282,8 @@ public class GameplayUIController : BaseUIController
 
     public void ShowLevelUpNotification()
     {
-        SetTextColor(LEVEL_TEXT, Color.gold);
-        SetTextColor(EXP_TEXT, Color.gold);
+        SetTextColor(LEVEL_TEXT, Color.yellow);
+        SetTextColor(EXP_TEXT, Color.yellow);
         CoroutineRunner.StartRoutine(ResetLevelUpColors());
     }
 
@@ -396,7 +304,6 @@ public class GameplayUIController : BaseUIController
     {
         UnsubscribeFromEvents();
         base.OnCleanup();
-
         scoreSystem = null;
         spawnSystem = null;
         playerHealth = null;

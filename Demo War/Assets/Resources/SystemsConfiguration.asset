@@ -17,12 +17,13 @@ MonoBehaviour:
   waveConfiguration: {fileID: 11400000, guid: d8a53cec5d7f2df40a49142d3f7cb3b8, type: 2}
   enemyDatabase: {fileID: 11400000, guid: d490aaa7bcca35445b4a31fce757f931, type: 2}
   difficultyManager: {fileID: 11400000, guid: 572a149f48f50ae46a00aa7679280d4a, type: 2}
-  playerMoveSpeed: 5
-  playerHealth: 1000
-  playerDamage: 100
+  playerStats: {fileID: 11400000, guid: 090c8a7444dce3547a154cfb141c91b4, type: 2}
   maxEnemiesOnScreen: 100
   poolInitialSize: 50
   enablePerformanceOptimizations: 1
   showWaveDebugInfo: 0
   showDifficultyDebugInfo: 0
   enableWaveSkipping: 0
+  playerMoveSpeed: 5
+  playerHealth: 1000
+  playerDamage: 100

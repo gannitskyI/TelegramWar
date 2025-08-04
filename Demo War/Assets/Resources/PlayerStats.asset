@@ -17,7 +17,7 @@ MonoBehaviour:
   baseAttackRange: 5
   baseBulletSpeed: 15
   baseMoveSpeed: 5
-  baseMaxHealth: 100
+  baseMaxHealth: 105
   baseHealthRegen: 0
   damageMultiplier: 1
   attackSpeedMultiplier: 1
