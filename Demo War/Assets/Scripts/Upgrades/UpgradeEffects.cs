@@ -11,12 +11,22 @@ public interface IUpgradeEffect
 public abstract class BaseUpgradeEffect : IUpgradeEffect
 {
     protected readonly GameObject playerObject;
+    protected PlayerStats playerStats;
 
     public abstract UpgradeType TargetType { get; }
 
     protected BaseUpgradeEffect(GameObject player)
     {
         playerObject = player ?? throw new System.ArgumentNullException(nameof(player));
+
+        if (ServiceLocator.TryGet<PlayerStats>(out var stats))
+        {
+            playerStats = stats;
+        }
+        else
+        {
+            Debug.LogWarning($"{GetType().Name}: PlayerStats not found in ServiceLocator");
+        }
     }
 
     public abstract void Apply(UpgradeConfig config, float deltaValue, int currentLevel);
@@ -28,45 +38,35 @@ public class DamageUpgradeEffect : BaseUpgradeEffect
 {
     public override UpgradeType TargetType => UpgradeType.Damage;
 
-    private PlayerCombat playerCombat;
-    private float originalDamage;
-    private float currentMultiplier = 1f;
+    private float accumulatedBonus = 0f;
 
-    public DamageUpgradeEffect(GameObject player) : base(player)
-    {
-        playerCombat = player.GetComponent<PlayerCombat>();
-        if (playerCombat != null)
-        {
-            originalDamage = playerCombat.GetBulletDamage();
-        }
-    }
+    public DamageUpgradeEffect(GameObject player) : base(player) { }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier += deltaValue;
-        var newDamage = originalDamage * currentMultiplier;
+        accumulatedBonus += deltaValue;
+        playerStats.SetDamageMultiplier(1f + accumulatedBonus);
 
-        playerCombat.SetBulletDamage(newDamage);
+        Debug.Log($"Damage upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final damage: {playerStats.FinalDamage:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier -= totalValue;
-        var newDamage = originalDamage * currentMultiplier;
-
-        playerCombat.SetBulletDamage(newDamage);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetDamageMultiplier(1f + accumulatedBonus);
     }
 
     public override void Reset()
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier = 1f;
-        playerCombat.SetBulletDamage(originalDamage);
+        accumulatedBonus = 0f;
+        playerStats.SetDamageMultiplier(1f);
     }
 }
 
@@ -74,45 +74,35 @@ public class AttackSpeedUpgradeEffect : BaseUpgradeEffect
 {
     public override UpgradeType TargetType => UpgradeType.AttackSpeed;
 
-    private PlayerCombat playerCombat;
-    private float originalInterval;
-    private float currentMultiplier = 1f;
+    private float accumulatedBonus = 0f;
 
-    public AttackSpeedUpgradeEffect(GameObject player) : base(player)
-    {
-        playerCombat = player.GetComponent<PlayerCombat>();
-        if (playerCombat != null)
-        {
-            originalInterval = playerCombat.GetAttackInterval();
-        }
-    }
+    public AttackSpeedUpgradeEffect(GameObject player) : base(player) { }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier += deltaValue;
-        var newInterval = originalInterval / currentMultiplier;
+        accumulatedBonus += deltaValue;
+        playerStats.SetAttackSpeedMultiplier(1f + accumulatedBonus);
 
-        playerCombat.SetAttackInterval(newInterval);
+        Debug.Log($"Attack speed upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final speed: {playerStats.FinalAttackSpeed:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier -= totalValue;
-        var newInterval = originalInterval / currentMultiplier;
-
-        playerCombat.SetAttackInterval(newInterval);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetAttackSpeedMultiplier(1f + accumulatedBonus);
     }
 
     public override void Reset()
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier = 1f;
-        playerCombat.SetAttackInterval(originalInterval);
+        accumulatedBonus = 0f;
+        playerStats.SetAttackSpeedMultiplier(1f);
     }
 }
 
@@ -120,45 +110,35 @@ public class AttackRangeUpgradeEffect : BaseUpgradeEffect
 {
     public override UpgradeType TargetType => UpgradeType.AttackRange;
 
-    private PlayerCombat playerCombat;
-    private float originalRange;
-    private float currentMultiplier = 1f;
+    private float accumulatedBonus = 0f;
 
-    public AttackRangeUpgradeEffect(GameObject player) : base(player)
-    {
-        playerCombat = player.GetComponent<PlayerCombat>();
-        if (playerCombat != null)
-        {
-            originalRange = playerCombat.GetAttackRange();
-        }
-    }
+    public AttackRangeUpgradeEffect(GameObject player) : base(player) { }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier += deltaValue;
-        var newRange = originalRange * currentMultiplier;
+        accumulatedBonus += deltaValue;
+        playerStats.SetAttackRangeMultiplier(1f + accumulatedBonus);
 
-        playerCombat.SetAttackRange(newRange);
+        Debug.Log($"Attack range upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final range: {playerStats.FinalAttackRange:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier -= totalValue;
-        var newRange = originalRange * currentMultiplier;
-
-        playerCombat.SetAttackRange(newRange);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetAttackRangeMultiplier(1f + accumulatedBonus);
     }
 
     public override void Reset()
     {
-        if (playerCombat == null) return;
+        if (playerStats == null) return;
 
-        currentMultiplier = 1f;
-        playerCombat.SetAttackRange(originalRange);
+        accumulatedBonus = 0f;
+        playerStats.SetAttackRangeMultiplier(1f);
     }
 }
 
@@ -167,44 +147,41 @@ public class MoveSpeedUpgradeEffect : BaseUpgradeEffect
     public override UpgradeType TargetType => UpgradeType.MoveSpeed;
 
     private PlayerMovement playerMovement;
-    private float originalSpeed;
-    private float currentMultiplier = 1f;
+    private float accumulatedBonus = 0f;
 
     public MoveSpeedUpgradeEffect(GameObject player) : base(player)
     {
         playerMovement = player.GetComponent<PlayerMovement>();
-        if (playerMovement != null)
-        {
-            originalSpeed = playerMovement.GetMoveSpeed();
-        }
     }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        if (playerMovement == null) return;
+        if (playerStats == null || playerMovement == null) return;
 
-        currentMultiplier += deltaValue;
-        var newSpeed = originalSpeed * currentMultiplier;
+        accumulatedBonus += deltaValue;
+        playerStats.SetMoveSpeedMultiplier(1f + accumulatedBonus);
+        playerMovement.SetMoveSpeed(playerStats.FinalMoveSpeed);
 
-        playerMovement.SetMoveSpeed(newSpeed);
+        Debug.Log($"Move speed upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final speed: {playerStats.FinalMoveSpeed:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        if (playerMovement == null) return;
+        if (playerStats == null || playerMovement == null) return;
 
-        currentMultiplier -= totalValue;
-        var newSpeed = originalSpeed * currentMultiplier;
-
-        playerMovement.SetMoveSpeed(newSpeed);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetMoveSpeedMultiplier(1f + accumulatedBonus);
+        playerMovement.SetMoveSpeed(playerStats.FinalMoveSpeed);
     }
 
     public override void Reset()
     {
-        if (playerMovement == null) return;
+        if (playerStats == null || playerMovement == null) return;
 
-        currentMultiplier = 1f;
-        playerMovement.SetMoveSpeed(originalSpeed);
+        accumulatedBonus = 0f;
+        playerStats.SetMoveSpeedMultiplier(1f);
+        playerMovement.SetMoveSpeed(playerStats.FinalMoveSpeed);
     }
 }
 
@@ -213,45 +190,50 @@ public class HealthUpgradeEffect : BaseUpgradeEffect
     public override UpgradeType TargetType => UpgradeType.Health;
 
     private PlayerHealth playerHealth;
-    private float originalMaxHealth;
-    private float currentBonus = 0f;
+    private float accumulatedBonus = 0f;
 
     public HealthUpgradeEffect(GameObject player) : base(player)
     {
         playerHealth = player.GetComponent<PlayerHealth>();
-        if (playerHealth != null)
-        {
-            originalMaxHealth = playerHealth.GetMaxHealth();
-        }
     }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        if (playerHealth == null) return;
+        if (playerStats == null || playerHealth == null) return;
 
-        var healthBonus = originalMaxHealth * deltaValue;
-        currentBonus += healthBonus;
+        accumulatedBonus += deltaValue;
+        playerStats.SetMaxHealthMultiplier(1f + accumulatedBonus);
 
-        playerHealth.SetMaxHealth(originalMaxHealth + currentBonus);
-        playerHealth.Heal(healthBonus);
+        float newMaxHealth = playerStats.FinalMaxHealth;
+        float healthIncrease = newMaxHealth - playerHealth.GetMaxHealth();
+
+        playerHealth.SetMaxHealth(newMaxHealth);
+        if (healthIncrease > 0)
+        {
+            playerHealth.Heal(healthIncrease);
+        }
+
+        Debug.Log($"Max health upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final health: {newMaxHealth:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        if (playerHealth == null) return;
+        if (playerStats == null || playerHealth == null) return;
 
-        var healthReduction = originalMaxHealth * totalValue;
-        currentBonus -= healthReduction;
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetMaxHealthMultiplier(1f + accumulatedBonus);
 
-        playerHealth.SetMaxHealth(originalMaxHealth + currentBonus);
+        playerHealth.SetMaxHealth(playerStats.FinalMaxHealth);
     }
 
     public override void Reset()
     {
-        if (playerHealth == null) return;
+        if (playerStats == null || playerHealth == null) return;
 
-        currentBonus = 0f;
-        playerHealth.SetMaxHealth(originalMaxHealth);
+        accumulatedBonus = 0f;
+        playerStats.SetMaxHealthMultiplier(1f);
+        playerHealth.SetMaxHealth(playerStats.FinalMaxHealth);
     }
 }
 
@@ -260,8 +242,7 @@ public class HealthRegenUpgradeEffect : BaseUpgradeEffect
     public override UpgradeType TargetType => UpgradeType.HealthRegen;
 
     private PlayerHealth playerHealth;
-    private float currentRegenRate = 0f;
-    private float regenTimer = 0f;
+    private float accumulatedBonus = 0f;
 
     public HealthRegenUpgradeEffect(GameObject player) : base(player)
     {
@@ -270,46 +251,47 @@ public class HealthRegenUpgradeEffect : BaseUpgradeEffect
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        currentRegenRate += deltaValue;
+        if (playerStats == null) return;
 
-        if (currentRegenRate > 0f && !IsRegenerationActive())
+        accumulatedBonus += deltaValue;
+        playerStats.SetHealthRegenBonus(accumulatedBonus);
+
+        if (playerHealth != null && playerStats.FinalHealthRegen > 0f)
         {
-            StartRegeneration();
+            playerHealth.StartHealthRegeneration(playerStats.FinalHealthRegen);
         }
+
+        Debug.Log($"Health regen upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2}, final regen: {playerStats.FinalHealthRegen:F1})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        currentRegenRate -= totalValue;
-        currentRegenRate = Mathf.Max(0f, currentRegenRate);
+        if (playerStats == null) return;
 
-        if (currentRegenRate <= 0f)
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
+        playerStats.SetHealthRegenBonus(accumulatedBonus);
+
+        if (playerHealth != null)
         {
-            StopRegeneration();
+            if (playerStats.FinalHealthRegen > 0f)
+            {
+                playerHealth.StartHealthRegeneration(playerStats.FinalHealthRegen);
+            }
+            else
+            {
+                playerHealth.StopHealthRegeneration();
+            }
         }
     }
 
     public override void Reset()
     {
-        currentRegenRate = 0f;
-        StopRegeneration();
-    }
+        if (playerStats == null) return;
 
-    private bool IsRegenerationActive()
-    {
-        return currentRegenRate > 0f;
-    }
+        accumulatedBonus = 0f;
+        playerStats.SetHealthRegenBonus(0f);
 
-    private void StartRegeneration()
-    {
-        if (playerHealth != null)
-        {
-            playerHealth.StartHealthRegeneration(currentRegenRate);
-        }
-    }
-
-    private void StopRegeneration()
-    {
         if (playerHealth != null)
         {
             playerHealth.StopHealthRegeneration();
@@ -321,27 +303,28 @@ public class ExperienceUpgradeEffect : BaseUpgradeEffect
 {
     public override UpgradeType TargetType => UpgradeType.ExperienceMultiplier;
 
-    private float currentMultiplier = 1f;
+    private float accumulatedBonus = 0f;
 
-    public ExperienceUpgradeEffect(GameObject player) : base(player)
-    {
-    }
+    public ExperienceUpgradeEffect(GameObject player) : base(player) { }
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        currentMultiplier += deltaValue;
+        accumulatedBonus += deltaValue;
         UpdateExperienceMultiplier();
+
+        Debug.Log($"Experience multiplier upgraded: +{deltaValue:F2} (total bonus: {accumulatedBonus:F2})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        currentMultiplier -= totalValue;
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
         UpdateExperienceMultiplier();
     }
 
     public override void Reset()
     {
-        currentMultiplier = 1f;
+        accumulatedBonus = 0f;
         UpdateExperienceMultiplier();
     }
 
@@ -349,7 +332,7 @@ public class ExperienceUpgradeEffect : BaseUpgradeEffect
     {
         if (ServiceLocator.TryGet<ScoreSystem>(out var scoreSystem))
         {
-            scoreSystem.SetExperienceMultiplier(currentMultiplier);
+            scoreSystem.SetExperienceMultiplier(1f + accumulatedBonus);
         }
     }
 }
@@ -359,7 +342,7 @@ public class CriticalChanceUpgradeEffect : BaseUpgradeEffect
     public override UpgradeType TargetType => UpgradeType.CriticalChance;
 
     private PlayerCombat playerCombat;
-    private float currentCritChance = 0f;
+    private float accumulatedBonus = 0f;
 
     public CriticalChanceUpgradeEffect(GameObject player) : base(player)
     {
@@ -368,20 +351,22 @@ public class CriticalChanceUpgradeEffect : BaseUpgradeEffect
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        currentCritChance += deltaValue;
+        accumulatedBonus += deltaValue;
         UpdateCriticalChance();
+
+        Debug.Log($"Critical chance upgraded: +{deltaValue:F2} (total: {accumulatedBonus:F2})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        currentCritChance -= totalValue;
-        currentCritChance = Mathf.Max(0f, currentCritChance);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
         UpdateCriticalChance();
     }
 
     public override void Reset()
     {
-        currentCritChance = 0f;
+        accumulatedBonus = 0f;
         UpdateCriticalChance();
     }
 
@@ -389,7 +374,7 @@ public class CriticalChanceUpgradeEffect : BaseUpgradeEffect
     {
         if (playerCombat != null)
         {
-            playerCombat.SetCriticalChance(currentCritChance);
+            playerCombat.SetCriticalChance(accumulatedBonus);
         }
     }
 }
@@ -399,7 +384,8 @@ public class CriticalDamageUpgradeEffect : BaseUpgradeEffect
     public override UpgradeType TargetType => UpgradeType.CriticalDamage;
 
     private PlayerCombat playerCombat;
-    private float currentCritMultiplier = 1.5f;
+    private float accumulatedBonus = 0f;
+    private const float baseCritMultiplier = 1.5f;
 
     public CriticalDamageUpgradeEffect(GameObject player) : base(player)
     {
@@ -408,20 +394,22 @@ public class CriticalDamageUpgradeEffect : BaseUpgradeEffect
 
     public override void Apply(UpgradeConfig config, float deltaValue, int currentLevel)
     {
-        currentCritMultiplier += deltaValue;
+        accumulatedBonus += deltaValue;
         UpdateCriticalDamage();
+
+        Debug.Log($"Critical damage upgraded: +{deltaValue:F2} (total multiplier: {baseCritMultiplier + accumulatedBonus:F2})");
     }
 
     public override void Remove(UpgradeConfig config, float totalValue)
     {
-        currentCritMultiplier -= totalValue;
-        currentCritMultiplier = Mathf.Max(1f, currentCritMultiplier);
+        accumulatedBonus -= totalValue;
+        accumulatedBonus = Mathf.Max(0f, accumulatedBonus);
         UpdateCriticalDamage();
     }
 
     public override void Reset()
     {
-        currentCritMultiplier = 1.5f;
+        accumulatedBonus = 0f;
         UpdateCriticalDamage();
     }
 
@@ -429,7 +417,7 @@ public class CriticalDamageUpgradeEffect : BaseUpgradeEffect
     {
         if (playerCombat != null)
         {
-            playerCombat.SetCriticalDamageMultiplier(currentCritMultiplier);
+            playerCombat.SetCriticalDamageMultiplier(baseCritMultiplier + accumulatedBonus);
         }
     }
 }

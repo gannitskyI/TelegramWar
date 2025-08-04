@@ -4,7 +4,7 @@ using System.Collections;
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(SpriteRenderer))]
-public class EnemyBehaviour : MonoBehaviour, IEnemy
+public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 {
     [Header("Enemy Configuration")]
     [SerializeField] private EnemyConfig enemyConfig;
@@ -77,7 +77,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         if (config == null)
         {
-            Debug.LogError($"Enemy {gameObject.name}: EnemyConfig is null during initialization");
             return;
         }
 
@@ -120,7 +119,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
         if (enemyConfig == null)
         {
-            Debug.LogError($"Enemy {gameObject.name}: No EnemyConfig available for pool initialization");
             return;
         }
 
@@ -136,7 +134,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         if (enemyConfig == null)
         {
-            Debug.LogError($"Enemy {gameObject.name}: No EnemyConfig available for reuse");
             return;
         }
 
@@ -153,10 +150,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         movementTimer = 0f;
         healthRegenTimer = 0f;
 
-        if (cachedRenderer != null)
-        {
-            cachedRenderer.color = enemyConfig.enemyColor;
-        }
+        SetupVisuals();
 
         if (cachedRigidbody != null)
         {
@@ -172,23 +166,8 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     {
         if (cachedRenderer == null || enemyConfig == null) return;
 
-        string spriteKey = GetSpriteKeyForTier(enemyConfig.tier);
-        cachedRenderer.sprite = SpriteCache.GetSprite(spriteKey);
-        cachedRenderer.color = enemyConfig.enemyColor;
+        cachedRenderer.sprite = SpriteCache.GetEnemySprite(enemyConfig.tier, enemyConfig.enemyColor);
         cachedRenderer.sortingOrder = 5;
-    }
-
-    private string GetSpriteKeyForTier(EnemyTier tier)
-    {
-        return tier switch
-        {
-            EnemyTier.Tier1 => "enemy_basic",
-            EnemyTier.Tier2 => "enemy_basic",
-            EnemyTier.Tier3 => "enemy_elite",
-            EnemyTier.Tier4 => "enemy_boss",
-            EnemyTier.Tier5 => "enemy_boss",
-            _ => "enemy_basic"
-        };
     }
 
     private void CachePlayerReference()
@@ -335,12 +314,22 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         movementTimer += Time.deltaTime;
     }
 
-    public void TakeDamage(float damageAmount)
+    public void TakeDamage(float damage, IDamageSource source)
     {
-        if (!isInitialized || hasExploded || enemyConfig.immuneToPlayerBullets)
+        if (!isInitialized || hasExploded)
             return;
 
-        float actualDamage = enemyConfig.CalculateDamageReduction(damageAmount);
+        if (source.GetTeam() == DamageTeam.Enemy)
+        {
+            return;
+        }
+
+        if (enemyConfig.immuneToPlayerBullets && source.GetTeam() == DamageTeam.Player)
+        {
+            return;
+        }
+
+        float actualDamage = enemyConfig.CalculateDamageReduction(damage);
 
         if (currentShieldHealth > 0f)
         {
@@ -351,7 +340,10 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
 
         if (actualDamage > 0f)
         {
-            currentHealth -= actualDamage;
+            float previousHealth = currentHealth;
+            currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
+
+            Debug.Log($"Enemy took {actualDamage:F1} damage. Health: {previousHealth:F1} -> {currentHealth:F1}");
         }
 
         if (gameObject.activeInHierarchy)
@@ -363,6 +355,13 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         }
     }
 
+    [System.Obsolete("Use TakeDamage(float damage, IDamageSource source) instead")]
+    public void TakeDamage(float damageAmount)
+    {
+        var genericSource = new GenericDamageSource(damageAmount, DamageTeam.Player, "Unknown Source", gameObject, transform.position);
+        TakeDamage(damageAmount, genericSource);
+    }
+
     private IEnumerator DamageFlash()
     {
         if (cachedRenderer == null) yield break;
@@ -370,7 +369,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         Color originalColor = cachedRenderer.color;
         cachedRenderer.color = Color.white;
         yield return new WaitForSeconds(0.1f);
-        cachedRenderer.color = originalColor;
+
+        if (cachedRenderer != null)
+        {
+            cachedRenderer.color = originalColor;
+        }
     }
 
     private void Die()
@@ -418,10 +421,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
         transform.rotation = Quaternion.identity;
         transform.localScale = Vector3.one * enemyConfig.scale;
 
-        if (cachedRenderer != null)
-        {
-            cachedRenderer.color = enemyConfig.enemyColor;
-        }
+        SetupVisuals();
 
         if (cachedRigidbody != null)
         {
@@ -448,4 +448,29 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy
     public bool IsInitialized() => isInitialized;
     public EnemyConfig GetConfig() => enemyConfig;
     public float GetExplosionDamage() => enemyConfig?.explosionDamage ?? 20f;
+    public DamageTeam GetTeam() => DamageTeam.Enemy;
+}
+
+public class GenericDamageSource : IDamageSource
+{
+    private float damage;
+    private DamageTeam team;
+    private string sourceName;
+    private GameObject sourceObject;
+    private Vector3 sourcePosition;
+
+    public GenericDamageSource(float damage, DamageTeam team, string sourceName, GameObject sourceObject, Vector3 sourcePosition)
+    {
+        this.damage = damage;
+        this.team = team;
+        this.sourceName = sourceName;
+        this.sourceObject = sourceObject;
+        this.sourcePosition = sourcePosition;
+    }
+
+    public float GetDamage() => damage;
+    public DamageTeam GetTeam() => team;
+    public string GetSourceName() => sourceName;
+    public GameObject GetSourceObject() => sourceObject;
+    public Vector3 GetSourcePosition() => sourcePosition;
 }

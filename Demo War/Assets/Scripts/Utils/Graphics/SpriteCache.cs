@@ -10,7 +10,7 @@ public static class SpriteCache
     {
         if (isInitialized) return;
 
-        CreateEnemySprites();
+        CreateBasicSprites();
         CreateProjectileSprites();
         CreateExperienceSprite();
         CreateBulletSprites();
@@ -18,11 +18,11 @@ public static class SpriteCache
         isInitialized = true;
     }
 
-    private static void CreateEnemySprites()
+    private static void CreateBasicSprites()
     {
-        cachedSprites["enemy_basic"] = CreateCircleSprite(32, Color.red);
-        cachedSprites["enemy_elite"] = CreateCircleSprite(40, Color.magenta);
-        cachedSprites["enemy_boss"] = CreateCircleSprite(64, Color.black);
+        cachedSprites["enemy_basic_white"] = CreateCircleSprite(32, Color.white);
+        cachedSprites["enemy_elite_white"] = CreateCircleSprite(40, Color.white);
+        cachedSprites["enemy_boss_white"] = CreateCircleSprite(64, Color.white);
     }
 
     private static void CreateProjectileSprites()
@@ -79,6 +79,72 @@ public static class SpriteCache
         {
             Initialize();
         }
+
+        return cachedSprites.TryGetValue(key, out var sprite) ? sprite : null;
+    }
+
+    public static Sprite GetEnemySprite(EnemyTier tier, Color color)
+    {
+        if (!isInitialized)
+        {
+            Initialize();
+        }
+
+        string colorKey = $"{color.r:F2}_{color.g:F2}_{color.b:F2}";
+        string spriteKey = $"{GetBaseSpriteKeyForTier(tier)}_{colorKey}";
+
+        if (cachedSprites.TryGetValue(spriteKey, out var existingSprite))
+        {
+            return existingSprite;
+        }
+
+        int size = GetSizeForTier(tier);
+        var newSprite = CreateCircleSprite(size, color);
+        cachedSprites[spriteKey] = newSprite;
+
+        return newSprite;
+    }
+
+    private static string GetBaseSpriteKeyForTier(EnemyTier tier)
+    {
+        return tier switch
+        {
+            EnemyTier.Tier1 => "enemy_basic",
+            EnemyTier.Tier2 => "enemy_basic",
+            EnemyTier.Tier3 => "enemy_elite",
+            EnemyTier.Tier4 => "enemy_boss",
+            EnemyTier.Tier5 => "enemy_boss",
+            _ => "enemy_basic"
+        };
+    }
+
+    private static int GetSizeForTier(EnemyTier tier)
+    {
+        return tier switch
+        {
+            EnemyTier.Tier1 => 32,
+            EnemyTier.Tier2 => 36,
+            EnemyTier.Tier3 => 40,
+            EnemyTier.Tier4 => 56,
+            EnemyTier.Tier5 => 64,
+            _ => 32
+        };
+    }
+
+    public static Sprite GetWhiteEnemySprite(EnemyTier tier)
+    {
+        if (!isInitialized)
+        {
+            Initialize();
+        }
+
+        string key = tier switch
+        {
+            EnemyTier.Tier1 or EnemyTier.Tier2 => "enemy_basic_white",
+            EnemyTier.Tier3 => "enemy_elite_white",
+            EnemyTier.Tier4 or EnemyTier.Tier5 => "enemy_boss_white",
+            _ => "enemy_basic_white"
+        };
 
         return cachedSprites.TryGetValue(key, out var sprite) ? sprite : null;
     }

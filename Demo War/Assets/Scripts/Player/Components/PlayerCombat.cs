@@ -3,11 +3,8 @@ using UnityEngine;
 
 public class PlayerCombat : MonoBehaviour, IInitializable
 {
-    [Header("Combat Settings")]
-    [SerializeField] private float attackRange = 5f;
-    [SerializeField] private float attackInterval = 0.5f;
-    [SerializeField] private float bulletDamage = 10f;
-    [SerializeField] private float bulletSpeed = 15f;
+    [Header("Player Stats Reference")]
+    [SerializeField] private PlayerStats playerStats;
 
     [Header("Bullet Settings")]
     [SerializeField] private Transform firePoint;
@@ -17,17 +14,20 @@ public class PlayerCombat : MonoBehaviour, IInitializable
     private float attackTimer;
     private EnemyDamageReceiver currentTarget;
     private bool canAttack = true;
-    private SystemsConfiguration config;
 
     private float targetScanInterval = 0.1f;
     private float targetScanTimer;
 
     public IEnumerator Initialize()
     {
-        config = ServiceLocator.Get<SystemsConfiguration>();
-        if (config != null)
+        if (playerStats == null)
         {
-            bulletDamage = config.playerDamage;
+            playerStats = Resources.Load<PlayerStats>("PlayerStats");
+            if (playerStats == null)
+            {
+                Debug.LogError("PlayerStats not found! Creating default stats.");
+                playerStats = CreateDefaultStats();
+            }
         }
 
         if (firePoint == null)
@@ -41,12 +41,32 @@ public class PlayerCombat : MonoBehaviour, IInitializable
         attackTimer = 0f;
         targetScanTimer = 0f;
 
+        ServiceLocator.Register<PlayerStats>(playerStats);
+
+        if (playerStats != null)
+        {
+            playerStats.OnStatsChanged += OnStatsChanged;
+            Debug.Log($"PlayerCombat initialized with stats: Damage={playerStats.FinalDamage:F1}, AttackSpeed={playerStats.FinalAttackSpeed:F1}");
+        }
+
         yield return null;
+    }
+
+    private PlayerStats CreateDefaultStats()
+    {
+        var stats = ScriptableObject.CreateInstance<PlayerStats>();
+        Debug.LogWarning("Using temporary PlayerStats. Please create PlayerStats asset in Resources folder.");
+        return stats;
+    }
+
+    private void OnStatsChanged(PlayerStats stats)
+    {
+        Debug.Log($"Player stats updated: Damage={stats.FinalDamage:F1}, AttackSpeed={stats.FinalAttackSpeed:F1}");
     }
 
     void Update()
     {
-        if (!canAttack) return;
+        if (!canAttack || playerStats == null) return;
 
         attackTimer += Time.deltaTime;
         targetScanTimer += Time.deltaTime;
@@ -57,7 +77,7 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             targetScanTimer = 0f;
         }
 
-        if (attackTimer >= attackInterval && currentTarget != null)
+        if (attackTimer >= playerStats.AttackInterval && currentTarget != null)
         {
             Attack(currentTarget.gameObject);
             attackTimer = 0f;
@@ -66,12 +86,12 @@ public class PlayerCombat : MonoBehaviour, IInitializable
 
     private void FindNearestEnemy()
     {
-        currentTarget = EnemyRegistry.Instance.FindClosestEnemy(transform.position, attackRange);
+        currentTarget = EnemyRegistry.Instance.FindClosestEnemy(transform.position, playerStats.FinalAttackRange);
     }
 
     private void Attack(GameObject target)
     {
-        if (target == null) return;
+        if (target == null || playerStats == null) return;
 
         Vector3 direction = (target.transform.position - firePoint.position).normalized;
         CreatePlayerBullet(firePoint.position, direction);
@@ -123,10 +143,12 @@ public class PlayerCombat : MonoBehaviour, IInitializable
 
     private void SetupPlayerBullet(GameObject bulletObject, Vector3 direction)
     {
+        if (playerStats == null) return;
+
         var rb = bulletObject.GetComponent<Rigidbody2D>();
         if (rb != null)
         {
-            rb.linearVelocity = direction.normalized * bulletSpeed;
+            rb.linearVelocity = direction.normalized * playerStats.FinalBulletSpeed;
         }
 
         if (direction != Vector3.zero)
@@ -134,45 +156,37 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             bulletObject.transform.rotation = Quaternion.LookRotation(Vector3.forward, direction);
         }
 
-        string sourceName = $"Player Bullet (from {gameObject.name})";
-        bulletObject.SetupProjectileDamageSource(bulletDamage, DamageTeam.Player, sourceName, gameObject);
+        float currentDamage = playerStats.FinalDamage;
+        string sourceName = $"Player Bullet ({currentDamage:F1} dmg)";
+        bulletObject.SetupProjectileDamageSource(currentDamage, DamageTeam.Player, sourceName, gameObject);
 
         var projectileLifetime = bulletObject.AddComponent<ProjectileLifetime>();
         projectileLifetime.Initialize(5f);
     }
 
-    public void UpgradeDamage(float multiplier)
-    {
-        bulletDamage *= multiplier;
-    }
-
-    public void UpgradeAttackSpeed(float multiplier)
-    {
-        attackInterval *= (1f / multiplier);
-        attackInterval = Mathf.Max(0.1f, attackInterval);
-    }
-
-    public void UpgradeRange(float multiplier)
-    {
-        attackRange *= multiplier;
-    }
-
     public void SetCanAttack(bool canAttack) => this.canAttack = canAttack;
-    public float GetAttackRange() => attackRange;
-    public float GetAttackInterval() => attackInterval;
-    public float GetBulletDamage() => bulletDamage;
+
+    public float GetAttackRange() => playerStats?.FinalAttackRange ?? 5f;
+    public float GetAttackInterval() => playerStats?.AttackInterval ?? 0.5f;
+    public float GetBulletDamage() => playerStats?.FinalDamage ?? 10f;
     public bool HasTarget() => currentTarget != null;
 
     public void Cleanup()
     {
         currentTarget = null;
         canAttack = false;
+
+        if (playerStats != null)
+        {
+            playerStats.OnStatsChanged -= OnStatsChanged;
+        }
     }
 
     void OnDrawGizmosSelected()
     {
+        float range = playerStats?.FinalAttackRange ?? 5f;
         Gizmos.color = canAttack ? Color.cyan : Color.gray;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
+        Gizmos.DrawWireSphere(transform.position, range);
 
         if (currentTarget != null)
         {
@@ -180,7 +194,21 @@ public class PlayerCombat : MonoBehaviour, IInitializable
             Gizmos.DrawLine(transform.position, currentTarget.transform.position);
         }
     }
+
+    [ContextMenu("Log Player Stats")]
+    private void LogPlayerStats()
+    {
+        if (playerStats != null)
+        {
+            Debug.Log(playerStats.GetStatsDebugInfo());
+        }
+        else
+        {
+            Debug.LogError("PlayerStats not assigned!");
+        }
+    }
 }
+
 public class ProjectileLifetime : MonoBehaviour
 {
     private float lifetime;
@@ -197,7 +225,6 @@ public class ProjectileLifetime : MonoBehaviour
         timer += Time.deltaTime;
         if (timer >= lifetime)
         {
-            Debug.Log($"[PROJECTILE] Lifetime expired: {gameObject.name}");
             Destroy(gameObject);
         }
     }

@@ -14,10 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   allEnemies:
   - {fileID: 11400000, guid: 5bfebd4a72a5c6a47825e532c2784286, type: 2}
-  - {fileID: 11400000, guid: 4669408652434a145abfad2acf9dd14b, type: 2}
   - {fileID: 11400000, guid: deb762f14cc3345469bdb7c3c3c7da0c, type: 2}
-  - {fileID: 11400000, guid: 503d6784207928342bc1f8a6e14d4db4, type: 2}
-  - {fileID: 11400000, guid: b056e2c1fc64ff743a9a3cba9b54da2c, type: 2}
-  - {fileID: 11400000, guid: e09f82d47db7db64297071a721d6fc04, type: 2}
-  - {fileID: 11400000, guid: 78ae32eaecc61a8439fcc139a4f71b04, type: 2}
-  - {fileID: 11400000, guid: 9ae03e7e5b2f10f488032f7193436cb5, type: 2}
+  - {fileID: 11400000, guid: 4669408652434a145abfad2acf9dd14b, type: 2}
+  - {fileID: 11400000, guid: 1386a6622200c5146b48f1814fec36d5, type: 2}
+  - {fileID: 11400000, guid: 7fb40ea1f421bec4d87dfe056fc70c6a, type: 2}
+  - {fileID: 11400000, guid: c0928c0a77eea874abc06f3e4e8fffa0, type: 2}
+  - {fileID: 11400000, guid: faae480dc89cddf44922e63a4c4b5a18, type: 2}

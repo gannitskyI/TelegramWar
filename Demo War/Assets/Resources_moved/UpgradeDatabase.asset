@@ -13,12 +13,23 @@ MonoBehaviour:
   m_Name: UpgradeDatabase
   m_EditorClassIdentifier: 
   allUpgrades:
-  - {fileID: 11400000, guid: 57177128187b7214dbed056101af1614, type: 2}
-  - {fileID: 11400000, guid: 036630821d81a29408c7e5a3dca331b8, type: 2}
+  - {fileID: 11400000, guid: 961b00589d2a0a04d97c2b64803a3071, type: 2}
+  - {fileID: 11400000, guid: 7342a968053556043a1136a9473a68de, type: 2}
   - {fileID: 11400000, guid: 8037ecb3cd029eb4ba0ba481574ca9b2, type: 2}
-  - {fileID: 11400000, guid: bd6c7ec2a3cd44f44ac96cf621dfaf7e, type: 2}
+  - {fileID: 11400000, guid: 36bbfa86da4e48a40bec1ddf736d6963, type: 2}
+  - {fileID: 11400000, guid: c00f060c48d698448b484b749bab5aa1, type: 2}
   - {fileID: 11400000, guid: 255ea75bd9bc1cc49852e803b2e52589, type: 2}
+  - {fileID: 11400000, guid: 036630821d81a29408c7e5a3dca331b8, type: 2}
+  - {fileID: 11400000, guid: 27d68dc39adb3d740b160cb07709422d, type: 2}
+  - {fileID: 11400000, guid: 57177128187b7214dbed056101af1614, type: 2}
+  - {fileID: 11400000, guid: 2d645ac38cc6b86468dc667c166bdd1c, type: 2}
+  - {fileID: 11400000, guid: 128934be23bab4d4bad78a736f8cc0cb, type: 2}
+  - {fileID: 11400000, guid: e01a3d22fe4cd2f469fab2be10866e35, type: 2}
   - {fileID: 11400000, guid: 1da7baf0677024c438bf051101c1eeb6, type: 2}
+  - {fileID: 11400000, guid: bd6c7ec2a3cd44f44ac96cf621dfaf7e, type: 2}
+  - {fileID: 11400000, guid: f2480c8ebd286c6458173a16db4b7cc5, type: 2}
+  - {fileID: 11400000, guid: 8c82219bb6cb43d479fac4a9d14a6b38, type: 2}
+  - {fileID: 11400000, guid: 2638228f280ac614a99ba622b0dc8c37, type: 2}
   defaultSelectionCount: 3
   allowDuplicateTypes: 0
   rarityBonusMultiplier: 1.5

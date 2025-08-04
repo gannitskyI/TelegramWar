@@ -4,7 +4,6 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour, IInitializable
 {
     [Header("Movement Settings")]
-    [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float smoothTime = 0.1f;
     [SerializeField] private InputReader inputReader;
 
@@ -13,6 +12,8 @@ public class PlayerMovement : MonoBehaviour, IInitializable
     private bool isMoving;
     private Rigidbody2D rb2d;
     private bool isInitialized = false;
+    private PlayerStats playerStats;
+    private float currentMoveSpeed;
 
     public int InitializationOrder => 10;
 
@@ -33,6 +34,17 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         rb2d.linearDamping = 8f;
         rb2d.freezeRotation = true;
 
+        if (ServiceLocator.TryGet<PlayerStats>(out playerStats))
+        {
+            currentMoveSpeed = playerStats.FinalMoveSpeed;
+            playerStats.OnStatsChanged += OnStatsChanged;
+        }
+        else
+        {
+            currentMoveSpeed = 5f;
+            Debug.LogWarning("PlayerMovement: PlayerStats not found, using default speed");
+        }
+
         if (inputReader == null)
         {
             yield return TryGetInputReader();
@@ -51,8 +63,13 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         targetPosition = transform.position;
         isInitialized = true;
 
-        Debug.Log($"PlayerMovement initialized at position: {transform.position}");
+        Debug.Log($"PlayerMovement initialized with speed: {currentMoveSpeed:F1}");
         yield return null;
+    }
+
+    private void OnStatsChanged(PlayerStats stats)
+    {
+        currentMoveSpeed = stats.FinalMoveSpeed;
     }
 
     private IEnumerator TryGetInputReader()
@@ -63,7 +80,6 @@ public class PlayerMovement : MonoBehaviour, IInitializable
             if (ServiceLocator.TryGet<InputReader>(out var locatorInputReader))
             {
                 inputReader = locatorInputReader;
-                Debug.Log("PlayerMovement: Got InputReader from ServiceLocator");
                 break;
             }
 
@@ -81,14 +97,11 @@ public class PlayerMovement : MonoBehaviour, IInitializable
     {
         if (!isInitialized)
         {
-            Debug.LogWarning("PlayerMovement: Received input but not initialized yet");
             return;
         }
 
         targetPosition = ClampToScreen(new Vector3(worldPosition.x, worldPosition.y, transform.position.z));
         isMoving = true;
-
-        Debug.Log($"PlayerMovement: Move target set to: {targetPosition}");
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         WebGLHelper.TriggerHapticFeedback("light");
@@ -102,9 +115,8 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         isMoving = false;
         if (rb2d != null)
         {
-            rb2d.linearVelocity = Vector2.zero; 
+            rb2d.linearVelocity = Vector2.zero;
         }
-        Debug.Log("PlayerMovement: Movement canceled");
     }
 
     private Vector3 ClampToScreen(Vector3 position)
@@ -112,7 +124,6 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         var camera = Camera.main;
         if (camera == null)
         {
-            Debug.LogWarning("PlayerMovement: No main camera found for screen clamping");
             return position;
         }
 
@@ -138,7 +149,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
             if (distance < 0.1f)
             {
                 isMoving = false;
-                rb2d.linearVelocity = Vector2.zero; 
+                rb2d.linearVelocity = Vector2.zero;
                 return;
             }
 
@@ -147,7 +158,7 @@ public class PlayerMovement : MonoBehaviour, IInitializable
                 targetPosition,
                 ref velocity,
                 smoothTime,
-                moveSpeed
+                currentMoveSpeed
             );
 
             rb2d.MovePosition(newPosition);
@@ -163,13 +174,13 @@ public class PlayerMovement : MonoBehaviour, IInitializable
 
         if (distance > 0.1f)
         {
-            float currentSpeed = Mathf.Min(moveSpeed, distance * 10f);
-            rb2d.linearVelocity = direction * currentSpeed; 
+            float currentSpeed = Mathf.Min(currentMoveSpeed, distance * 10f);
+            rb2d.linearVelocity = direction * currentSpeed;
         }
         else
         {
             isMoving = false;
-            rb2d.linearVelocity = Vector2.zero; 
+            rb2d.linearVelocity = Vector2.zero;
         }
     }
 
@@ -178,22 +189,26 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         isInitialized = false;
         isMoving = false;
 
+        if (playerStats != null)
+        {
+            playerStats.OnStatsChanged -= OnStatsChanged;
+        }
+
         if (inputReader != null)
         {
             inputReader.MoveEvent -= HandleMoveInput;
             inputReader.MoveCancelEvent -= HandleMoveCancel;
-            Debug.Log("PlayerMovement: Input events unsubscribed");
         }
 
         if (rb2d != null)
         {
-            rb2d.linearVelocity = Vector2.zero;  
+            rb2d.linearVelocity = Vector2.zero;
         }
     }
 
     public bool IsMoving() => isMoving;
     public Vector3 GetTargetPosition() => targetPosition;
-    public float GetMoveSpeed() => moveSpeed;
+    public float GetMoveSpeed() => currentMoveSpeed;
     public bool IsInitialized() => isInitialized;
 
     public void SetPosition(Vector3 position)
@@ -205,15 +220,14 @@ public class PlayerMovement : MonoBehaviour, IInitializable
         if (rb2d != null)
         {
             rb2d.position = clampedPosition;
-            rb2d.linearVelocity = Vector2.zero;  
+            rb2d.linearVelocity = Vector2.zero;
         }
 
         isMoving = false;
-        Debug.Log($"PlayerMovement: Position set to: {clampedPosition}");
     }
 
     public void SetMoveSpeed(float newSpeed)
     {
-        moveSpeed = Mathf.Max(0.1f, newSpeed);
+        currentMoveSpeed = Mathf.Max(0.1f, newSpeed);
     }
 }

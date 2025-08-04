@@ -32,7 +32,6 @@ public class EnemyFactory
     {
         if (string.IsNullOrEmpty(enemyId))
         {
-            Debug.LogError("Enemy ID is null or empty!");
             return null;
         }
 
@@ -41,7 +40,6 @@ public class EnemyFactory
         var enemyConfig = enemyDatabase?.GetEnemyById(enemyId);
         if (enemyConfig == null)
         {
-            Debug.LogError($"Enemy config not found for ID: {enemyId}");
             return null;
         }
 
@@ -59,7 +57,6 @@ public class EnemyFactory
             }
             else
             {
-                Debug.LogError($"EnemyBehaviour component not found on pooled enemy: {enemyId}");
                 ReturnToPool(pooledEnemy, enemyId);
                 return null;
             }
@@ -94,9 +91,7 @@ public class EnemyFactory
         enemyGO.transform.position = position;
 
         var renderer = enemyGO.AddComponent<SpriteRenderer>();
-        string spriteKey = GetSpriteKeyForTier(enemyConfig.tier);
-        renderer.sprite = SpriteCache.GetSprite(spriteKey);
-        renderer.color = enemyConfig.enemyColor;
+        renderer.sprite = SpriteCache.GetEnemySprite(enemyConfig.tier, enemyConfig.enemyColor);
         renderer.sortingOrder = 5;
 
         var rb = enemyGO.AddComponent<Rigidbody2D>();
@@ -114,21 +109,7 @@ public class EnemyFactory
         int enemyLayer = LayerMask.NameToLayer("Enemy");
         if (enemyLayer != -1) enemyGO.layer = enemyLayer;
 
-        Debug.Log($"Created fallback enemy: {enemyConfig.enemyName}");
         return enemyGO;
-    }
-
-    private string GetSpriteKeyForTier(EnemyTier tier)
-    {
-        return tier switch
-        {
-            EnemyTier.Tier1 => "enemy_basic",
-            EnemyTier.Tier2 => "enemy_basic",
-            EnemyTier.Tier3 => "enemy_elite",
-            EnemyTier.Tier4 => "enemy_boss",
-            EnemyTier.Tier5 => "enemy_boss",
-            _ => "enemy_basic"
-        };
     }
 
     public async Task<GameObject> CreateEnemyForPool(string enemyId)
@@ -136,7 +117,6 @@ public class EnemyFactory
         var enemyConfig = enemyDatabase?.GetEnemyById(enemyId);
         if (enemyConfig == null)
         {
-            Debug.LogError($"Enemy config not found for pool creation: {enemyId}");
             return null;
         }
 
@@ -163,7 +143,6 @@ public class EnemyFactory
     {
         if (enemyDatabase?.allEnemies == null)
         {
-            Debug.LogWarning("No enemies in database to warmup");
             return;
         }
 
@@ -176,11 +155,9 @@ public class EnemyFactory
                     await enemyPool.WarmupAsync(enemyConfig.enemyId, 2);
                 }
             }
-            Debug.Log("Enemy pools warmed up successfully");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"Failed to warmup pools: {e.Message}");
             isWarmedUp = false;
         }
     }
