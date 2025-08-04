@@ -16,8 +16,11 @@ public class ProjectileDamageSource : MonoBehaviour, IDamageSource
         sourceName = projectileSourceName;
         sourceObject = creator != null ? creator : gameObject;
         hasDealtDamage = false;
+    }
 
-        Debug.Log($"[DAMAGE SYSTEM] Projectile initialized: {sourceName}, Team: {team}, Damage: {damage}");
+    private void OnEnable()
+    {
+        hasDealtDamage = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -26,30 +29,17 @@ public class ProjectileDamageSource : MonoBehaviour, IDamageSource
 
         var damageable = other.GetComponent<IDamageable>();
         if (damageable == null) return;
+        if (damageable.GetTeam() == team) return;
+        if (!damageable.IsAlive()) return;
 
-        if (damageable.GetTeam() == team)
-        {
-            Debug.Log($"[DAMAGE SYSTEM] Projectile ignored friendly target: {other.name} (Same team: {team})");
-            return;
-        }
-
-        if (!damageable.IsAlive())
-        {
-            Debug.Log($"[DAMAGE SYSTEM] Projectile ignored dead target: {other.name}");
-            return;
-        }
-
-        Debug.Log($"[DAMAGE SYSTEM] Projectile hit valid target: {other.name}");
         damageable.TakeDamage(damage, this);
         hasDealtDamage = true;
-
-        DestroyProjectile();
+        DisableProjectile();
     }
 
-    private void DestroyProjectile()
+    private void DisableProjectile()
     {
-        Debug.Log($"[DAMAGE SYSTEM] Destroying projectile: {sourceName}");
-        Destroy(gameObject);
+        gameObject.SetActive(false);
     }
 
     public float GetDamage() => damage;
@@ -58,7 +48,3 @@ public class ProjectileDamageSource : MonoBehaviour, IDamageSource
     public GameObject GetSourceObject() => sourceObject;
     public Vector3 GetSourcePosition() => transform.position;
 }
-
- 
-
- 

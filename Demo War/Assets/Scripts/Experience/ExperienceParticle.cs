@@ -3,14 +3,12 @@ using System.Collections.Generic;
 
 public class ExperienceParticle : MonoBehaviour
 {
-    [Header("Experience Settings")]
     [SerializeField] private int experienceValue = 10;
     [SerializeField] private float attractionRange = 3f;
     [SerializeField] private float attractionSpeed = 8f;
     [SerializeField] private float baseSpeed = 2f;
     [SerializeField] private float lifetime = 30f;
 
-    private Transform player;
     private Rigidbody2D rb;
     private bool isBeingAttracted = false;
     private float timer;
@@ -21,10 +19,13 @@ public class ExperienceParticle : MonoBehaviour
     private Color originalColor;
 
     private static readonly List<ExperienceParticle> allParticles = new List<ExperienceParticle>(100);
-    private static readonly Queue<ExperienceParticle> particlePool = new Queue<ExperienceParticle>(50);
+    private static readonly Queue<ExperienceParticle> particlePool = new Queue<ExperienceParticle>(100);
     private static Transform playerTransform;
     private static ScoreSystem cachedScoreSystem;
     private static readonly Vector3[] directions = new Vector3[8];
+    private const int MAX_POOL_SIZE = 250;
+    private static float lastHapticTime = -1f;
+    private const float HAPTIC_COOLDOWN = 0.07f;
 
     static ExperienceParticle()
     {
@@ -35,46 +36,7 @@ public class ExperienceParticle : MonoBehaviour
         }
     }
 
-    void Awake()
-    {
-        rb = GetComponent<Rigidbody2D>();
-        if (rb == null)
-        {
-            rb = gameObject.AddComponent<Rigidbody2D>();
-            rb.gravityScale = 0f;
-            rb.linearDamping = 1f;
-        }
-
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        if (spriteRenderer == null)
-        {
-            spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
-            SetupSprite();
-        }
-        originalColor = spriteRenderer.color;
-    }
-
-    void Start()
-    {
-        allParticles.Add(this);
-        CachePlayerReference();
-
-        Vector3 randomDirection = directions[Random.Range(0, directions.Length)];
-        rb.linearVelocity = randomDirection * baseSpeed;
-
-        timer = 0f;
-        isCollected = false;
-        isBeingAttracted = false;
-    }
-
-    private void SetupSprite()
-    {
-        spriteRenderer.sprite = SpriteCache.GetSprite("experience");
-        originalColor = new Color(0.2f, 1f, 0.3f, 1f);
-        spriteRenderer.color = originalColor;
-    }
-
-    private static void CachePlayerReference()
+    public static void CacheReferences()
     {
         if (playerTransform == null)
         {
@@ -83,10 +45,57 @@ public class ExperienceParticle : MonoBehaviour
                 playerTransform = playerObject.transform;
             }
         }
-
         if (cachedScoreSystem == null)
         {
             ServiceLocator.TryGet<ScoreSystem>(out cachedScoreSystem);
+        }
+    }
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        if (rb == null)
+        {
+            rb = gameObject.AddComponent<Rigidbody2D>();
+        }
+        rb.gravityScale = 0f;
+        rb.linearDamping = 1f;
+
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
+        {
+            spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+        }
+        if (spriteRenderer.sprite == null)
+        {
+            spriteRenderer.sprite = SpriteCache.GetSprite("experience");
+        }
+        originalColor = new Color(0.2f, 1f, 0.3f, 1f);
+        spriteRenderer.color = originalColor;
+    }
+
+    void OnEnable()
+    {
+        allParticles.Add(this);
+        ResetParticle();
+        if (playerTransform == null || cachedScoreSystem == null)
+        {
+            CacheReferences();
+        }
+        Vector3 randomDirection = directions[Random.Range(0, directions.Length)];
+        rb.linearVelocity = randomDirection * baseSpeed;
+    }
+
+    void OnDisable()
+    {
+        allParticles.Remove(this);
+        if (particlePool.Count < MAX_POOL_SIZE)
+        {
+            particlePool.Enqueue(this);
+        }
+        else
+        {
+            Destroy(gameObject);
         }
     }
 
@@ -95,10 +104,9 @@ public class ExperienceParticle : MonoBehaviour
         if (isCollected) return;
 
         timer += Time.deltaTime;
-
         if (timer >= lifetime)
         {
-            ReturnToPool();
+            gameObject.SetActive(false);
             return;
         }
 
@@ -118,18 +126,21 @@ public class ExperienceParticle : MonoBehaviour
                 isBeingAttracted = true;
                 AttractToPlayer(sqrDistance);
             }
+            else
+            {
+                isBeingAttracted = false;
+            }
         }
 
-        UpdateVisualEffects();
+        UpdateVisual();
     }
 
     private void AttractToPlayer(float sqrDistance)
     {
         if (playerTransform == null || isCollected) return;
-
         Vector3 direction = (playerTransform.position - transform.position);
         float distance = Mathf.Sqrt(sqrDistance);
-        direction /= distance;
+        direction /= distance > 0f ? distance : 1f;
 
         if (distance < 0.5f)
         {
@@ -141,13 +152,10 @@ public class ExperienceParticle : MonoBehaviour
         rb.linearVelocity = direction * attractionSpeed * speedMultiplier;
     }
 
-    private void UpdateVisualEffects()
+    private void UpdateVisual()
     {
-        if (spriteRenderer == null || isCollected) return;
-
         float pulse = 1f + Mathf.Sin(Time.time * pulseSpeed) * 0.2f;
         transform.localScale = Vector3.one * pulse;
-
         if (isBeingAttracted)
         {
             spriteRenderer.color = Color.Lerp(originalColor, Color.yellow,
@@ -157,7 +165,6 @@ public class ExperienceParticle : MonoBehaviour
         {
             spriteRenderer.color = originalColor;
         }
-
         if (timer > lifetime * 0.8f)
         {
             float alpha = 1f - ((timer - lifetime * 0.8f) / (lifetime * 0.2f));
@@ -171,51 +178,19 @@ public class ExperienceParticle : MonoBehaviour
     {
         if (isCollected) return;
         isCollected = true;
-
         rb.linearVelocity = Vector2.zero;
         rb.isKinematic = true;
         spriteRenderer.enabled = false;
-
         if (cachedScoreSystem != null)
         {
             cachedScoreSystem.AddExperience(experienceValue);
         }
-
-        WebGLHelper.TriggerHapticFeedback("light");
-        ReturnToPool();
-    }
-
-    private void ReturnToPool()
-    {
-        if (allParticles.Contains(this))
+        if (Time.time - lastHapticTime > HAPTIC_COOLDOWN)
         {
-            allParticles.Remove(this);
+            lastHapticTime = Time.time;
+            WebGLHelper.TriggerHapticFeedback("light");
         }
-
         gameObject.SetActive(false);
-        particlePool.Enqueue(this);
-    }
-
-    public static GameObject CreateExperienceParticle(Vector3 position, int experienceValue = 10)
-    {
-        ExperienceParticle particle;
-
-        if (particlePool.Count > 0)
-        {
-            particle = particlePool.Dequeue();
-            particle.transform.position = position;
-            particle.gameObject.SetActive(true);
-            particle.ResetParticle();
-        }
-        else
-        {
-            var particleGO = new GameObject("ExperienceParticle");
-            particleGO.transform.position = position;
-            particle = particleGO.AddComponent<ExperienceParticle>();
-        }
-
-        particle.SetExperienceValue(experienceValue);
-        return particle.gameObject;
     }
 
     private void ResetParticle()
@@ -236,43 +211,56 @@ public class ExperienceParticle : MonoBehaviour
     void OnTriggerEnter2D(Collider2D other)
     {
         if (isCollected) return;
-
-        var playerHealth = other.GetComponent<PlayerHealth>();
-        if (playerHealth != null)
+        if (other.CompareTag("Player"))
         {
             CollectExperience();
         }
     }
 
-    private void OnDestroy()
+    public static GameObject CreateExperienceParticle(Vector3 position, int experienceValue = 10)
     {
-        if (allParticles.Contains(this))
+        ExperienceParticle particle = null;
+        if (particlePool.Count > 0)
         {
-            allParticles.Remove(this);
+            particle = particlePool.Dequeue();
+            if (particle != null)
+            {
+                particle.transform.position = position;
+                particle.SetExperienceValue(experienceValue);
+                particle.gameObject.SetActive(true);
+                return particle.gameObject;
+            }
+        }
+        var particleGO = new GameObject("ExperienceParticle");
+        particleGO.transform.position = position;
+        particle = particleGO.AddComponent<ExperienceParticle>();
+        particle.SetExperienceValue(experienceValue);
+        return particle.gameObject;
+    }
+
+    public static void PrewarmPool(int count)
+    {
+        int needToAdd = Mathf.Max(0, count - particlePool.Count);
+        for (int i = 0; i < needToAdd; i++)
+        {
+            var obj = new GameObject("ExperienceParticle");
+            obj.SetActive(false);
+            var ep = obj.AddComponent<ExperienceParticle>();
+            particlePool.Enqueue(ep);
         }
     }
 
     public static void ClearAllPools()
     {
-        foreach (var particle in allParticles.ToArray())
-        {
-            if (particle != null)
-            {
-                Object.Destroy(particle.gameObject);
-            }
-        }
-
         while (particlePool.Count > 0)
         {
             var particle = particlePool.Dequeue();
             if (particle != null)
             {
-                Object.Destroy(particle.gameObject);
+                Destroy(particle.gameObject);
             }
         }
-
         allParticles.Clear();
-        particlePool.Clear();
         playerTransform = null;
         cachedScoreSystem = null;
     }

@@ -9,12 +9,10 @@ public static class SpriteCache
     public static void Initialize()
     {
         if (isInitialized) return;
-
         CreateBasicSprites();
         CreateProjectileSprites();
         CreateExperienceSprite();
         CreateBulletSprites();
-
         isInitialized = true;
     }
 
@@ -40,7 +38,7 @@ public static class SpriteCache
     private static void CreateBulletSprites()
     {
         cachedSprites["bullet_player"] = CreateCircleSprite(16, Color.cyan);
-        cachedSprites["bullet_enemy"] = CreateCircleSprite(14, Color.orange);
+        cachedSprites["bullet_enemy"] = CreateCircleSprite(14, new Color(1f, 0.5f, 0f, 1f)); // Orange
     }
 
     private static Sprite CreateCircleSprite(int size, Color color)
@@ -49,7 +47,6 @@ public static class SpriteCache
         var colors = new Color[size * size];
         Vector2 center = new Vector2(size / 2f, size / 2f);
         float radius = size * 0.4f;
-
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
@@ -66,42 +63,29 @@ public static class SpriteCache
                 }
             }
         }
-
         texture.SetPixels(colors);
         texture.Apply();
-
         return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
     }
 
     public static Sprite GetSprite(string key)
     {
-        if (!isInitialized)
-        {
-            Initialize();
-        }
-
+        if (!isInitialized) Initialize();
         return cachedSprites.TryGetValue(key, out var sprite) ? sprite : null;
     }
 
     public static Sprite GetEnemySprite(EnemyTier tier, Color color)
     {
-        if (!isInitialized)
-        {
-            Initialize();
-        }
-
+        if (!isInitialized) Initialize();
         string colorKey = $"{color.r:F2}_{color.g:F2}_{color.b:F2}";
         string spriteKey = $"{GetBaseSpriteKeyForTier(tier)}_{colorKey}";
-
         if (cachedSprites.TryGetValue(spriteKey, out var existingSprite))
         {
             return existingSprite;
         }
-
         int size = GetSizeForTier(tier);
         var newSprite = CreateCircleSprite(size, color);
         cachedSprites[spriteKey] = newSprite;
-
         return newSprite;
     }
 
@@ -133,11 +117,7 @@ public static class SpriteCache
 
     public static Sprite GetWhiteEnemySprite(EnemyTier tier)
     {
-        if (!isInitialized)
-        {
-            Initialize();
-        }
-
+        if (!isInitialized) Initialize();
         string key = tier switch
         {
             EnemyTier.Tier1 or EnemyTier.Tier2 => "enemy_basic_white",
@@ -145,7 +125,6 @@ public static class SpriteCache
             EnemyTier.Tier4 or EnemyTier.Tier5 => "enemy_boss_white",
             _ => "enemy_basic_white"
         };
-
         return cachedSprites.TryGetValue(key, out var sprite) ? sprite : null;
     }
 
@@ -159,7 +138,6 @@ public static class SpriteCache
                 Object.Destroy(sprite);
             }
         }
-
         cachedSprites.Clear();
         isInitialized = false;
     }

@@ -30,6 +30,9 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     private bool isRetreating;
     private float healthRegenTimer;
 
+    private Vector3 prevPosition;
+    private bool gridRegistered = false;
+
     private static int PlayerLayer = -1;
     private static bool layersInitialized;
 
@@ -93,6 +96,8 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         int enemyLayer = LayerMask.NameToLayer("Enemy");
         if (enemyLayer != -1) gameObject.layer = enemyLayer;
         EnemyRegistry.Instance.RegisterEnemy(damageReceiver);
+        gridRegistered = true;
+        prevPosition = transform.position;
         gameObject.SetActive(true);
     }
 
@@ -129,7 +134,12 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
             cachedRigidbody.angularVelocity = 0f;
         }
         CachePlayerReference(true);
-        EnemyRegistry.Instance.RegisterEnemy(damageReceiver);
+        if (!gridRegistered)
+        {
+            EnemyRegistry.Instance.RegisterEnemy(damageReceiver);
+            gridRegistered = true;
+        }
+        prevPosition = transform.position;
     }
 
     private void SetupVisuals()
@@ -160,6 +170,12 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         UpdateMovement(distanceToPlayer);
         UpdateAttack(distanceToPlayer);
         UpdateTimers();
+
+        if ((transform.position - prevPosition).sqrMagnitude > 0.01f)
+        {
+            EnemyRegistry.Instance.UpdateEnemyCell(damageReceiver, prevPosition);
+            prevPosition = transform.position;
+        }
     }
 
     private void UpdateMovement(float distanceToPlayer)
@@ -276,14 +292,6 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
         {
             currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
         }
-        if (gameObject.activeInHierarchy)
-        {
-            if (cachedRenderer != null)
-            {
-                cachedRenderer.color = Color.white;
-                cachedRenderer.color = cachedRenderer.color;
-            }
-        }
         if (currentHealth <= 0)
         {
             Die();
@@ -322,7 +330,11 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
     public void ResetState()
     {
         if (enemyConfig == null) return;
-        EnemyRegistry.Instance.UnregisterEnemy(damageReceiver);
+        if (gridRegistered)
+        {
+            EnemyRegistry.Instance.UnregisterEnemy(damageReceiver);
+            gridRegistered = false;
+        }
         currentHealth = enemyConfig.maxHealth;
         currentShieldHealth = enemyConfig.hasShield ? enemyConfig.shieldHealth : 0f;
         moveSpeed = enemyConfig.moveSpeed;
@@ -348,7 +360,7 @@ public class EnemyBehaviour : MonoBehaviour, IEnemy, IDamageable
 
     private void OnDestroy()
     {
-        if (damageReceiver != null)
+        if (gridRegistered && damageReceiver != null)
         {
             EnemyRegistry.Instance.UnregisterEnemy(damageReceiver);
         }

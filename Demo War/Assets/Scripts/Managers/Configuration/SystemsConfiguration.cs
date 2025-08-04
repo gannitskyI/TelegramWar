@@ -119,12 +119,7 @@ public class SystemsConfiguration : ScriptableObject
         status += $"Max Enemies: {maxEnemiesOnScreen}\n";
         status += $"Pool Size: {poolInitialSize}\n";
         status += $"Performance Opts: {enablePerformanceOptimizations}";
-
-        if (playerStats != null)
-        {
-            status += "\n\n" + playerStats.GetStatsDebugInfo();
-        }
-
+         
         if (enemyDatabase != null)
         {
             status += "\n\n" + enemyDatabase.GetDatabaseInfo();

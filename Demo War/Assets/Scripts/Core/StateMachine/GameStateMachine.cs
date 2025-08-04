@@ -7,6 +7,7 @@ public class GameStateMachine
     private GameState currentState;
     private bool isTransitioning;
     private MonoBehaviour coroutineRunner;
+
     public void Update()
     {
         if (currentState != null && !isTransitioning)
@@ -14,9 +15,9 @@ public class GameStateMachine
             currentState.Update();
         }
     }
+
     public GameStateMachine()
     {
-        // Получаем CoroutineRunner для выполнения корутин
         coroutineRunner = CoroutineRunner.Instance;
     }
 
@@ -24,35 +25,22 @@ public class GameStateMachine
     {
         if (isTransitioning) return;
         isTransitioning = true;
-
-        try
+        if (currentState != null)
         {
-            // Выход из текущего состояния
-            if (currentState != null)
-            {
-                await RunCoroutineAsync(currentState.Exit());
-            }
-
-            // Вход в новое состояние
-            currentState = newState;
+            await RunCoroutineAsync(currentState.Exit());
+        }
+        currentState = newState;
+        if (currentState != null)
+        {
             await RunCoroutineAsync(currentState.Enter());
         }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"State transition failed: {e.Message}");
-        }
-        finally
-        {
-            isTransitioning = false;
-        }
+        isTransitioning = false;
     }
 
     private async Task RunCoroutineAsync(IEnumerator coroutine)
     {
         var tcs = new TaskCompletionSource<bool>();
-
         coroutineRunner.StartCoroutine(RunCoroutineWithCallback(coroutine, tcs));
-
         await tcs.Task;
     }
 

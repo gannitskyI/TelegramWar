@@ -27,54 +27,33 @@ public class AddressableManager : IInitializable
 
     public async Task<T> LoadAssetAsync<T>(string key) where T : UnityEngine.Object
     {
-        if (string.IsNullOrEmpty(key))
-        {
-            Debug.LogError("Ключ ассета null или пустой");
-            return null;
-        }
-
+        if (string.IsNullOrEmpty(key)) return null;
         if (loadedAssets.TryGetValue(key, out var existingHandle) && existingHandle.IsValid() && existingHandle.Status == AsyncOperationStatus.Succeeded)
             return existingHandle.Result as T;
 
         loadedAssets.Remove(key);
         var handle = Addressables.LoadAssetAsync<T>(key);
 
-        try
+        await handle.Task;
+        if (handle.Status == AsyncOperationStatus.Succeeded)
         {
-            await handle.Task;
-            if (handle.Status == AsyncOperationStatus.Succeeded)
-            {
-                loadedAssets[key] = handle;
-                return handle.Result;
-            }
-
-            Debug.LogError($"Не удалось загрузить ассет: {key}, Статус: {handle.Status}");
-            if (handle.IsValid())
-                Addressables.Release(handle);
-            return null;
+            loadedAssets[key] = handle;
+            return handle.Result;
         }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Исключение при загрузке ассета {key}: {e.Message}, Статус: {handle.Status}");
-            return null;
-        }
+        if (handle.IsValid())
+            Addressables.Release(handle);
+        return null;
     }
 
     public async Task<GameObject> InstantiateAsync(string key, Vector3 position = default, Quaternion rotation = default)
     {
-        if (string.IsNullOrEmpty(key))
-        {
-            Debug.LogError("Ключ ассета null или пустой");
-            return null;
-        }
-
+        if (string.IsNullOrEmpty(key)) return null;
         var handle = Addressables.InstantiateAsync(key, position, rotation);
         var timeoutTask = Task.Delay(5000);
         var completedTask = await Task.WhenAny(handle.Task, timeoutTask);
 
         if (completedTask == timeoutTask)
         {
-            Debug.LogError($"Таймаут загрузки ассета: {key}");
             if (handle.IsValid())
                 Addressables.Release(handle);
             return null;
@@ -87,7 +66,6 @@ public class AddressableManager : IInitializable
             return handle.Result;
         }
 
-        Debug.LogError($"Не удалось создать экземпляр: {key}, Статус: {handle.Status}");
         if (handle.IsValid())
             Addressables.Release(handle);
         return null;
@@ -95,15 +73,9 @@ public class AddressableManager : IInitializable
 
     public AsyncOperationHandle<UnityEngine.ResourceManagement.ResourceProviders.SceneInstance> LoadSceneAsync(string sceneKey)
     {
-        if (string.IsNullOrEmpty(sceneKey))
-        {
-            Debug.LogError("Ключ сцены null или пустой");
-            return default;
-        }
-
+        if (string.IsNullOrEmpty(sceneKey)) return default;
         if (loadedScenes.TryGetValue(sceneKey, out var existingHandle) && existingHandle.IsValid())
             return existingHandle;
-
         loadedScenes.Remove(sceneKey);
         var handle = Addressables.LoadSceneAsync(sceneKey, LoadSceneMode.Single);
         loadedScenes[sceneKey] = handle;
@@ -112,9 +84,7 @@ public class AddressableManager : IInitializable
 
     public void ReleaseAsset(GameObject instance)
     {
-        if (instance == null)
-            return;
-
+        if (instance == null) return;
         var instanceId = instance.GetInstanceID().ToString();
         if (loadedAssets.TryGetValue(instanceId, out var handle) && handle.IsValid())
         {
@@ -129,7 +99,6 @@ public class AddressableManager : IInitializable
         {
             Addressables.Release(handle);
             loadedAssets.Remove(key);
-            Debug.Log($"Освобожден ассет: {key}");
         }
     }
 
@@ -139,13 +108,11 @@ public class AddressableManager : IInitializable
         {
             Addressables.UnloadSceneAsync(sceneHandle);
             loadedScenes.Remove(sceneKey);
-            Debug.Log($"Освобождена сцена: {sceneKey}");
         }
     }
 
     public void Cleanup()
     {
-        Debug.Log("Очистка AddressableManager...");
         foreach (var kvp in loadedAssets)
         {
             if (kvp.Value.IsValid())
@@ -157,13 +124,9 @@ public class AddressableManager : IInitializable
                     else
                         Addressables.Release(kvp.Value);
                 }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"Ошибка освобождения ассета {kvp.Key}: {e.Message}");
-                }
+                catch { }
             }
         }
-
         foreach (var kvp in loadedScenes)
         {
             if (kvp.Value.IsValid())
@@ -172,28 +135,10 @@ public class AddressableManager : IInitializable
                 {
                     Addressables.UnloadSceneAsync(kvp.Value);
                 }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"Ошибка выгрузки сцены {kvp.Key}: {e.Message}");
-                }
+                catch { }
             }
         }
-
         loadedAssets.Clear();
         loadedScenes.Clear();
-        Debug.Log("Очистка AddressableManager завершена");
-    }
-
-    public string GetLoadedAssetsInfo()
-    {
-        var info = $"Загруженные ассеты ({loadedAssets.Count}):\n";
-        foreach (var kvp in loadedAssets)
-            info += $"- {kvp.Key}: {(kvp.Value.IsValid() ? kvp.Value.Status.ToString() : "Недействителен")}\n";
-
-        info += $"Загруженные сцены ({loadedScenes.Count}):\n";
-        foreach (var kvp in loadedScenes)
-            info += $"- {kvp.Key}: {(kvp.Value.IsValid() ? kvp.Value.Status.ToString() : "Недействителен")}\n";
-
-        return info;
     }
 }

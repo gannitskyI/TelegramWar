@@ -21,34 +21,25 @@ public class EnemyFactory
         }
     }
 
-    public async Task EnsureWarmedUp()
+    public async Task EnsureWarmedUp(int poolSize = 10)
     {
         if (isWarmedUp) return;
-        await WarmupPoolsAsync();
+        await WarmupPoolsAsync(poolSize);
         isWarmedUp = true;
     }
 
     public async Task<GameObject> CreateEnemy(string enemyId, Vector3 position)
     {
-        if (string.IsNullOrEmpty(enemyId))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrEmpty(enemyId)) return null;
         await EnsureWarmedUp();
-
         var enemyConfig = enemyDatabase?.GetEnemyById(enemyId);
-        if (enemyConfig == null)
-        {
-            return null;
-        }
+        if (enemyConfig == null) return null;
 
         var pooledEnemy = enemyPool.Get(enemyId);
         if (pooledEnemy != null)
         {
             pooledEnemy.transform.position = position;
             pooledEnemy.SetActive(true);
-
             var enemyComponent = pooledEnemy.GetComponent<EnemyBehaviour>();
             if (enemyComponent != null)
             {
@@ -61,7 +52,6 @@ public class EnemyFactory
                 return null;
             }
         }
-
         return await CreateNewEnemy(enemyId, position, enemyConfig);
     }
 
@@ -69,18 +59,15 @@ public class EnemyFactory
     {
         var prefabKey = $"Enemy_{enemyId}";
         var enemy = await addressableManager.InstantiateAsync(prefabKey, position);
-
         if (enemy == null)
         {
             enemy = CreateFallbackEnemy(position, enemyConfig);
         }
-
         var enemyBehaviour = enemy.GetComponent<EnemyBehaviour>();
         if (enemyBehaviour == null)
         {
             enemyBehaviour = enemy.AddComponent<EnemyBehaviour>();
         }
-
         enemyBehaviour.Initialize(enemyConfig, () => ReturnToPool(enemy, enemyId));
         return enemy;
     }
@@ -89,76 +76,51 @@ public class EnemyFactory
     {
         var enemyGO = new GameObject($"Enemy_{enemyConfig.enemyId}");
         enemyGO.transform.position = position;
-
         var renderer = enemyGO.AddComponent<SpriteRenderer>();
         renderer.sprite = SpriteCache.GetEnemySprite(enemyConfig.tier, enemyConfig.enemyColor);
         renderer.sortingOrder = 5;
-
         var rb = enemyGO.AddComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.linearDamping = 2f;
-
         var collider = enemyGO.AddComponent<CircleCollider2D>();
         collider.isTrigger = true;
         collider.radius = 0.5f * enemyConfig.scale;
-
         enemyGO.AddComponent<EnemyBehaviour>();
-
         try { enemyGO.tag = "Enemy"; } catch { }
-
         int enemyLayer = LayerMask.NameToLayer("Enemy");
         if (enemyLayer != -1) enemyGO.layer = enemyLayer;
-
         return enemyGO;
     }
 
     public async Task<GameObject> CreateEnemyForPool(string enemyId)
     {
         var enemyConfig = enemyDatabase?.GetEnemyById(enemyId);
-        if (enemyConfig == null)
-        {
-            return null;
-        }
-
+        if (enemyConfig == null) return null;
         var prefabKey = $"Enemy_{enemyId}";
         var enemy = await addressableManager.InstantiateAsync(prefabKey, Vector3.zero);
-
         if (enemy == null)
         {
             enemy = CreateFallbackEnemy(Vector3.zero, enemyConfig);
         }
-
         var enemyBehaviour = enemy.GetComponent<EnemyBehaviour>();
         if (enemyBehaviour == null)
         {
             enemyBehaviour = enemy.AddComponent<EnemyBehaviour>();
         }
-
         enemyBehaviour.InitializeForPool(enemyConfig);
         enemy.SetActive(false);
         return enemy;
     }
 
-    private async Task WarmupPoolsAsync()
+    private async Task WarmupPoolsAsync(int poolSize)
     {
-        if (enemyDatabase?.allEnemies == null)
+        if (enemyDatabase?.allEnemies == null) return;
+        foreach (var enemyConfig in enemyDatabase.allEnemies)
         {
-            return;
-        }
-
-        try
-        {
-            foreach (var enemyConfig in enemyDatabase.allEnemies)
+            if (enemyConfig != null && !string.IsNullOrEmpty(enemyConfig.enemyId))
             {
-                if (enemyConfig != null && !string.IsNullOrEmpty(enemyConfig.enemyId))
-                {
-                    await enemyPool.WarmupAsync(enemyConfig.enemyId, 2);
-                }
+                await enemyPool.WarmupAsync(enemyConfig.enemyId, poolSize);
             }
-        }
-        catch (System.Exception e)
-        {
-            isWarmedUp = false;
         }
     }
 
@@ -174,29 +136,6 @@ public class EnemyFactory
     {
         enemyPool?.ClearAll();
         isWarmedUp = false;
-    }
-
-    public string GetDebugInfo()
-    {
-        var info = enemyPool?.GetPoolInfo() ?? "EnemyPool not initialized";
-
-        if (enemyDatabase?.allEnemies != null)
-        {
-            info += $"\n\nRegistered Enemies ({enemyDatabase.allEnemies.Count}):\n";
-            foreach (var config in enemyDatabase.allEnemies)
-            {
-                if (config != null)
-                {
-                    info += $"- {config.enemyId} (Tier {(int)config.tier}, Difficulty: {config.difficultyValue:F1})\n";
-                }
-            }
-        }
-        else
-        {
-            info += "\n\nNo enemy database available";
-        }
-
-        return info;
     }
 
     public void Cleanup()

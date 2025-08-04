@@ -42,7 +42,6 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         {
             DestroyImmediate(existingDamageReceiver);
         }
-
         this.RegisterEventCleanup(() =>
         {
             OnHealthChanged = null;
@@ -55,33 +54,19 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         currentHealth = maxHealth;
         isDead = false;
         totalDamageTaken = 0f;
-
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public void TakeDamage(float damage, IDamageSource source)
     {
-        if (isDead || damage < 0)
-        {
-            return;
-        }
-
-        if (source.GetTeam() == DamageTeam.Player)
-        {
-            return;
-        }
+        if (isDead || damage < 0) return;
+        if (source.GetTeam() == DamageTeam.Player) return;
 
         float actualDamage = Mathf.Min(damage, currentHealth);
-        float previousHealth = currentHealth;
-
         currentHealth = Mathf.Max(0, currentHealth - damage);
         totalDamageTaken += actualDamage;
-
-        var damageRecord = new DamageRecord(actualDamage, source);
-        RecordDamage(damageRecord);
-
+        RecordDamage(new DamageRecord(actualDamage, source));
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
-
         if (currentHealth <= 0 && !isDead)
         {
             isDead = true;
@@ -97,25 +82,17 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     public void Heal(float amount)
     {
-        if (amount < 0)
-        {
-            return;
-        }
-
-        float previousHealth = currentHealth;
+        if (amount < 0) return;
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     public void ResetHealth()
     {
-        float previousHealth = currentHealth;
         currentHealth = maxHealth;
         isDead = false;
         totalDamageTaken = 0f;
         damageHistory.Clear();
-
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -131,47 +108,4 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     {
         this.CleanupEvents();
     }
-
-    [ContextMenu("Log Damage History")]
-    private void DebugLogDamageHistory()
-    {
-        Debug.Log($"Current health: {currentHealth:F1}/{maxHealth:F1}");
-        Debug.Log($"Total damage taken: {totalDamageTaken:F1}");
-        Debug.Log($"Damage events: {damageHistory.Count}");
-
-        foreach (var record in damageHistory)
-        {
-            float timeAgo = Time.time - record.timestamp;
-            Debug.Log($"{timeAgo:F1}s ago: {record.damage:F1} from {record.sourceName} (Team: {record.sourceTeam})");
-        }
-    }
-
-    [ContextMenu("Test Damage (10)")]
-    private void DebugTestDamage()
-    {
-        var testSource = new TestDamageSource("Debug Test", DamageTeam.Enemy, 10f, transform.position);
-        TakeDamage(10f, testSource);
-    }
-}
-
-public class TestDamageSource : IDamageSource
-{
-    private string sourceName;
-    private DamageTeam team;
-    private float damage;
-    private Vector3 position;
-
-    public TestDamageSource(string name, DamageTeam sourceTeam, float sourceDamage, Vector3 sourcePosition)
-    {
-        sourceName = name;
-        team = sourceTeam;
-        damage = sourceDamage;
-        position = sourcePosition;
-    }
-
-    public float GetDamage() => damage;
-    public DamageTeam GetTeam() => team;
-    public string GetSourceName() => sourceName;
-    public GameObject GetSourceObject() => null;
-    public Vector3 GetSourcePosition() => position;
 }

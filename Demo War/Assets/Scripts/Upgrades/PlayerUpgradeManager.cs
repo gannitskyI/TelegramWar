@@ -3,11 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using UnityEngine;
-
 public class PlayerUpgradeManager
 {
     private readonly Dictionary<string, PlayerUpgrade> activeUpgrades = new Dictionary<string, PlayerUpgrade>();
@@ -23,13 +18,20 @@ public class PlayerUpgradeManager
 
     public IReadOnlyDictionary<string, PlayerUpgrade> ActiveUpgrades => activeUpgrades;
     public int TotalUpgradeCount => activeUpgrades.Count;
-    public int TotalUpgradeLevels => activeUpgrades.Values.Sum(u => u.CurrentLevel);
+    public int TotalUpgradeLevels
+    {
+        get
+        {
+            int sum = 0;
+            foreach (var u in activeUpgrades.Values) sum += u.CurrentLevel;
+            return sum;
+        }
+    }
 
     public PlayerUpgradeManager(UpgradeDatabase database, GameObject player)
     {
-        upgradeDatabase = database ?? throw new ArgumentNullException(nameof(database));
-        playerObject = player ?? throw new ArgumentNullException(nameof(player));
-
+        upgradeDatabase = database;
+        playerObject = player;
         InitializeEffectSystem();
     }
 
@@ -50,58 +52,41 @@ public class PlayerUpgradeManager
 
         foreach (var effect in effects)
         {
-            if (effect != null)
+            if (effect == null) continue;
+            allEffects.Add(effect);
+            if (!effectsByType.TryGetValue(effect.TargetType, out var list))
             {
-                allEffects.Add(effect);
-
-                if (!effectsByType.ContainsKey(effect.TargetType))
-                    effectsByType[effect.TargetType] = new List<IUpgradeEffect>();
-
-                effectsByType[effect.TargetType].Add(effect);
+                list = new List<IUpgradeEffect>();
+                effectsByType[effect.TargetType] = list;
             }
+            list.Add(effect);
         }
-
-        Debug.Log($"PlayerUpgradeManager: Initialized {allEffects.Count} upgrade effects");
     }
 
     public bool CanApplyUpgrade(UpgradeConfig config)
     {
-        if (config == null || !config.IsEnabled)
-            return false;
-
+        if (config == null || !config.IsEnabled) return false;
         if (activeUpgrades.TryGetValue(config.UpgradeId, out var existing))
-        {
             return config.CanLevelUp(existing.CurrentLevel);
-        }
-
         var context = CreateUpgradeContext();
         return config.CanUnlock(context);
     }
 
     public bool ApplyUpgrade(UpgradeConfig config)
     {
-        if (!CanApplyUpgrade(config))
-            return false;
-
+        if (!CanApplyUpgrade(config)) return false;
         if (activeUpgrades.TryGetValue(config.UpgradeId, out var existing))
-        {
             return LevelUpUpgrade(existing, config);
-        }
         else
-        {
             return AddNewUpgrade(config);
-        }
     }
 
     private bool AddNewUpgrade(UpgradeConfig config)
     {
         var playerUpgrade = new PlayerUpgrade(config, 1);
         activeUpgrades[config.UpgradeId] = playerUpgrade;
-
         ApplyUpgradeEffects(playerUpgrade);
         OnUpgradeAdded?.Invoke(playerUpgrade);
-
-        Debug.Log($"Added new upgrade: {config.DisplayName}");
         return true;
     }
 
@@ -109,68 +94,41 @@ public class PlayerUpgradeManager
     {
         var oldLevel = existing.CurrentLevel;
         existing.LevelUp();
-
         ApplyUpgradeEffects(existing, oldLevel);
         OnUpgradeLeveledUp?.Invoke(existing);
-
-        Debug.Log($"Leveled up upgrade: {config.DisplayName} to level {existing.CurrentLevel}");
         return true;
     }
 
     private void ApplyUpgradeEffects(PlayerUpgrade upgrade, int previousLevel = 0)
     {
-        if (!effectsByType.TryGetValue(upgrade.Config.Type, out var effects))
-        {
-            Debug.LogWarning($"No effects found for upgrade type: {upgrade.Config.Type}");
-            return;
-        }
-
+        if (!effectsByType.TryGetValue(upgrade.Config.Type, out var effects)) return;
         var oldValue = previousLevel > 0 ? upgrade.Config.CalculateValueAtLevel(previousLevel) : 0f;
         var newValue = upgrade.Config.CalculateValueAtLevel(upgrade.CurrentLevel);
         var deltaValue = newValue - oldValue;
-
-        foreach (var effect in effects)
+        for (int i = 0; i < effects.Count; i++)
         {
-            try
-            {
-                effect.Apply(upgrade.Config, deltaValue, upgrade.CurrentLevel);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error applying upgrade effect {effect.GetType().Name}: {e.Message}");
-            }
+            effects[i].Apply(upgrade.Config, deltaValue, upgrade.CurrentLevel);
         }
     }
 
     public void RemoveUpgrade(string upgradeId)
     {
-        if (!activeUpgrades.TryGetValue(upgradeId, out var upgrade))
-            return;
-
+        if (!activeUpgrades.TryGetValue(upgradeId, out var upgrade)) return;
         if (effectsByType.TryGetValue(upgrade.Config.Type, out var effects))
         {
             var totalValue = upgrade.Config.CalculateValueAtLevel(upgrade.CurrentLevel);
-            foreach (var effect in effects)
+            for (int i = 0; i < effects.Count; i++)
             {
-                try
-                {
-                    effect.Remove(upgrade.Config, totalValue);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error removing upgrade effect {effect.GetType().Name}: {e.Message}");
-                }
+                effects[i].Remove(upgrade.Config, totalValue);
             }
         }
-
         activeUpgrades.Remove(upgradeId);
         OnUpgradeRemoved?.Invoke(upgradeId);
     }
 
     public float GetUpgradeMultiplier(UpgradeType type)
     {
-        var multiplier = 1f;
-
+        float multiplier = 1f;
         foreach (var upgrade in activeUpgrades.Values)
         {
             if (upgrade.Config.Type == type)
@@ -179,7 +137,6 @@ public class PlayerUpgradeManager
                 multiplier += value;
             }
         }
-
         return multiplier;
     }
 
@@ -195,23 +152,32 @@ public class PlayerUpgradeManager
 
     public List<PlayerUpgrade> GetUpgradesByType(UpgradeType type)
     {
-        return activeUpgrades.Values
-            .Where(u => u.Config.Type == type)
-            .ToList();
+        var result = new List<PlayerUpgrade>();
+        foreach (var u in activeUpgrades.Values)
+        {
+            if (u.Config.Type == type) result.Add(u);
+        }
+        return result;
     }
 
     public List<PlayerUpgrade> GetUpgradesByCategory(UpgradeCategory category)
     {
-        return activeUpgrades.Values
-            .Where(u => u.Config.Category.HasFlag(category))
-            .ToList();
+        var result = new List<PlayerUpgrade>();
+        foreach (var u in activeUpgrades.Values)
+        {
+            if ((u.Config.Category & category) != 0) result.Add(u);
+        }
+        return result;
     }
 
     public List<PlayerUpgrade> GetUpgradesByRarity(UpgradeRarity rarity)
     {
-        return activeUpgrades.Values
-            .Where(u => u.Config.Rarity == rarity)
-            .ToList();
+        var result = new List<PlayerUpgrade>();
+        foreach (var u in activeUpgrades.Values)
+        {
+            if (u.Config.Rarity == rarity) result.Add(u);
+        }
+        return result;
     }
 
     public bool HasUpgrade(string upgradeId)
@@ -228,75 +194,47 @@ public class PlayerUpgradeManager
     {
         var context = CreateUpgradeContext();
         var options = upgradeDatabase.GenerateUpgradeSelection(context, count);
-
-        if (options == null || options.Count == 0)
-        {
-            Debug.LogWarning("No upgrade options generated from database");
-        }
-
         return options ?? new List<UpgradeConfig>();
     }
 
     private UpgradeContext CreateUpgradeContext()
     {
         var context = new UpgradeContext();
-
         if (ServiceLocator.TryGet<ScoreSystem>(out var scoreSystem))
         {
             context.PlayerLevel = scoreSystem.GetCurrentLevel();
         }
-
         if (ServiceLocator.TryGet<SpawnSystem>(out var spawnSystem))
         {
             context.CurrentWave = spawnSystem.GetCurrentWave();
         }
-
         foreach (var upgrade in activeUpgrades)
         {
             context.OwnedUpgrades[upgrade.Key] = upgrade.Value.CurrentLevel;
         }
-
         return context;
     }
 
     public void ResetAllUpgrades()
     {
-        var upgradeIds = activeUpgrades.Keys.ToList();
-
-        foreach (var upgradeId in upgradeIds)
+        var upgradeIds = new List<string>(activeUpgrades.Keys);
+        for (int i = 0; i < upgradeIds.Count; i++)
         {
-            RemoveUpgrade(upgradeId);
+            RemoveUpgrade(upgradeIds[i]);
         }
-
-        foreach (var effect in allEffects)
+        for (int i = 0; i < allEffects.Count; i++)
         {
-            try
-            {
-                effect.Reset();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error resetting effect {effect.GetType().Name}: {e.Message}");
-            }
+            allEffects[i].Reset();
         }
-
         OnUpgradesReset?.Invoke();
     }
 
     public void RefreshAllEffects()
     {
-        foreach (var effect in allEffects)
+        for (int i = 0; i < allEffects.Count; i++)
         {
-            try
-            {
-                effect.Reset();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error resetting effect during refresh {effect.GetType().Name}: {e.Message}");
-            }
+            allEffects[i].Reset();
         }
-
         foreach (var upgrade in activeUpgrades.Values)
         {
             ApplyUpgradeEffects(upgrade);
@@ -306,21 +244,17 @@ public class PlayerUpgradeManager
     public UpgradeStatistics GetStatistics()
     {
         var stats = new UpgradeStatistics();
-
         foreach (var upgrade in activeUpgrades.Values)
         {
             stats.TotalUpgrades++;
             stats.TotalLevels += upgrade.CurrentLevel;
-
             if (!stats.UpgradesByType.ContainsKey(upgrade.Config.Type))
                 stats.UpgradesByType[upgrade.Config.Type] = 0;
             stats.UpgradesByType[upgrade.Config.Type]++;
-
             if (!stats.UpgradesByRarity.ContainsKey(upgrade.Config.Rarity))
                 stats.UpgradesByRarity[upgrade.Config.Rarity] = 0;
             stats.UpgradesByRarity[upgrade.Config.Rarity]++;
         }
-
         return stats;
     }
 
@@ -328,42 +262,35 @@ public class PlayerUpgradeManager
     {
         if (activeUpgrades.Count == 0)
             return "No upgrades acquired";
-
         var summary = "Active Upgrades:\n";
-        var groupedUpgrades = activeUpgrades.Values
-            .GroupBy(u => u.Config.Category)
-            .OrderBy(g => g.Key);
-
-        foreach (var group in groupedUpgrades)
+        var grouped = new Dictionary<UpgradeCategory, List<PlayerUpgrade>>();
+        foreach (var upgrade in activeUpgrades.Values)
         {
-            summary += $"\n{group.Key}:\n";
-            foreach (var upgrade in group.OrderBy(u => u.Config.DisplayName))
+            var category = upgrade.Config.Category;
+            if (!grouped.ContainsKey(category))
+                grouped[category] = new List<PlayerUpgrade>();
+            grouped[category].Add(upgrade);
+        }
+        foreach (var kvp in grouped)
+        {
+            summary += $"\n{kvp.Key}:\n";
+            foreach (var upgrade in kvp.Value)
             {
                 summary += $"  • {upgrade.Config.DisplayName} Lv.{upgrade.CurrentLevel}\n";
             }
         }
-
         return summary;
     }
 
     public void Cleanup()
     {
-        foreach (var effect in allEffects)
+        for (int i = 0; i < allEffects.Count; i++)
         {
-            try
-            {
-                effect.Reset();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Error during cleanup reset {effect.GetType().Name}: {e.Message}");
-            }
+            allEffects[i].Reset();
         }
-
         activeUpgrades.Clear();
         allEffects.Clear();
         effectsByType.Clear();
-
         OnUpgradeAdded = null;
         OnUpgradeLeveledUp = null;
         OnUpgradeRemoved = null;
@@ -377,7 +304,6 @@ public class PlayerUpgrade
     public int CurrentLevel { get; private set; }
     public DateTime AcquiredTime { get; }
     public DateTime LastLevelUpTime { get; private set; }
-
     public bool IsMaxLevel => CurrentLevel >= Config.MaxLevel;
     public float CurrentValue => Config.CalculateValueAtLevel(CurrentLevel);
     public float NextLevelValue => Config.CalculateValueAtLevel(CurrentLevel + 1);
@@ -385,7 +311,7 @@ public class PlayerUpgrade
 
     public PlayerUpgrade(UpgradeConfig config, int initialLevel = 1)
     {
-        Config = config ?? throw new ArgumentNullException(nameof(config));
+        Config = config;
         CurrentLevel = Mathf.Max(1, initialLevel);
         AcquiredTime = DateTime.Now;
         LastLevelUpTime = AcquiredTime;
@@ -393,9 +319,7 @@ public class PlayerUpgrade
 
     public void LevelUp()
     {
-        if (!CanLevelUp)
-            throw new InvalidOperationException($"Cannot level up upgrade '{Config.UpgradeId}' beyond max level {Config.MaxLevel}");
-
+        if (!CanLevelUp) throw new InvalidOperationException();
         CurrentLevel++;
         LastLevelUpTime = DateTime.Now;
     }

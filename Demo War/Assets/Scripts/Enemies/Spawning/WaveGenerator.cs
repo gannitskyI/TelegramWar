@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class WaveGenerator
@@ -13,7 +12,6 @@ public class WaveGenerator
         waveConfig = config;
         enemyDatabase = database;
         random = new System.Random();
-
         enemyDatabase.Initialize();
     }
 
@@ -30,14 +28,13 @@ public class WaveGenerator
 
         var tierWeights = waveConfig.GetTierWeights(waveNumber);
         waveData.enemyComposition = GenerateEnemyComposition(waveData.enemyCount, tierWeights, waveData.difficultyPoints);
-
         return waveData;
     }
 
     private List<EnemySpawnData> GenerateEnemyComposition(int totalEnemies, TierWeights weights, float difficultyBudget)
     {
         var composition = new List<EnemySpawnData>();
-        var usedDifficulty = 0f;
+        float usedDifficulty = 0f;
 
         var tierCounts = DistributeEnemiesByTier(totalEnemies, weights);
 
@@ -45,12 +42,10 @@ public class WaveGenerator
         {
             var tierEnemies = enemyDatabase.GetEnemiesByTier(tierCount.Key);
             if (tierEnemies.Count == 0) continue;
-
             for (int i = 0; i < tierCount.Value; i++)
             {
-                var remainingBudget = difficultyBudget - usedDifficulty;
+                float remainingBudget = difficultyBudget - usedDifficulty;
                 var enemy = SelectEnemyWithinBudget(tierEnemies, remainingBudget);
-
                 if (enemy != null)
                 {
                     composition.Add(new EnemySpawnData
@@ -58,39 +53,32 @@ public class WaveGenerator
                         enemyConfig = enemy,
                         spawnDelay = CalculateSpawnDelay(composition.Count, totalEnemies)
                     });
-
                     usedDifficulty += enemy.difficultyValue;
                 }
             }
         }
-
-        return composition.OrderBy(x => x.spawnDelay).ToList();
+        composition.Sort((a, b) => a.spawnDelay.CompareTo(b.spawnDelay));
+        return composition;
     }
 
     private Dictionary<EnemyTier, int> DistributeEnemiesByTier(int totalEnemies, TierWeights weights)
     {
         var distribution = new Dictionary<EnemyTier, int>();
-        var totalWeight = weights.tier1Weight + weights.tier2Weight + weights.tier3Weight + weights.tier4Weight + weights.tier5Weight;
-
+        float totalWeight = weights.tier1Weight + weights.tier2Weight + weights.tier3Weight + weights.tier4Weight + weights.tier5Weight;
         if (totalWeight <= 0) return distribution;
-
         var tiers = new[] { EnemyTier.Tier1, EnemyTier.Tier2, EnemyTier.Tier3, EnemyTier.Tier4, EnemyTier.Tier5 };
-        var remainingEnemies = totalEnemies;
+        int remainingEnemies = totalEnemies;
 
         foreach (var tier in tiers)
         {
-            var weight = weights.GetWeight(tier);
+            float weight = weights.GetWeight(tier);
             if (weight > 0)
             {
-                var count = Mathf.RoundToInt((weight / totalWeight) * totalEnemies);
-                count = Mathf.Min(count, remainingEnemies);
+                int count = Mathf.Min(Mathf.RoundToInt((weight / totalWeight) * totalEnemies), remainingEnemies);
                 distribution[tier] = count;
                 remainingEnemies -= count;
             }
-            else
-            {
-                distribution[tier] = 0;
-            }
+            else distribution[tier] = 0;
         }
 
         while (remainingEnemies > 0)
@@ -102,14 +90,17 @@ public class WaveGenerator
                 remainingEnemies--;
             }
         }
-
         return distribution;
     }
 
     private EnemyConfig SelectEnemyWithinBudget(List<EnemyConfig> availableEnemies, float budget)
     {
-        var affordableEnemies = availableEnemies.Where(e => e.difficultyValue <= budget).ToList();
-
+        var affordableEnemies = new List<EnemyConfig>();
+        for (int i = 0; i < availableEnemies.Count; i++)
+        {
+            if (availableEnemies[i].difficultyValue <= budget)
+                affordableEnemies.Add(availableEnemies[i]);
+        }
         if (affordableEnemies.Count == 0)
         {
             return availableEnemies.Count > 0 ? availableEnemies[random.Next(availableEnemies.Count)] : null;
@@ -117,35 +108,32 @@ public class WaveGenerator
 
         var weights = new float[affordableEnemies.Count];
         for (int i = 0; i < affordableEnemies.Count; i++)
-        {
             weights[i] = 1f / (affordableEnemies[i].difficultyValue + 1f);
-        }
 
-        return affordableEnemies[SelectWeightedRandom(weights)];
+        int index = SelectWeightedRandom(weights);
+        return affordableEnemies[index];
     }
 
     private int SelectWeightedRandom(float[] weights)
     {
-        var totalWeight = weights.Sum();
-        var randomValue = (float)random.NextDouble() * totalWeight;
-
-        var currentWeight = 0f;
+        float totalWeight = 0f;
+        for (int i = 0; i < weights.Length; i++)
+            totalWeight += weights[i];
+        float randomValue = (float)random.NextDouble() * totalWeight;
+        float currentWeight = 0f;
         for (int i = 0; i < weights.Length; i++)
         {
             currentWeight += weights[i];
             if (randomValue <= currentWeight)
-            {
                 return i;
-            }
         }
-
         return weights.Length - 1;
     }
 
     private float CalculateSpawnDelay(int enemyIndex, int totalEnemies)
     {
-        var baseDelay = (float)enemyIndex / totalEnemies;
-        var randomVariation = ((float)random.NextDouble() - 0.5f) * 0.2f;
+        float baseDelay = (float)enemyIndex / totalEnemies;
+        float randomVariation = ((float)random.NextDouble() - 0.5f) * 0.2f;
         return Mathf.Max(0f, baseDelay + randomVariation);
     }
 }
@@ -159,25 +147,6 @@ public class WaveData
     public float difficultyPoints;
     public float duration;
     public List<EnemySpawnData> enemyComposition;
-
-    public string GetWaveInfo()
-    {
-        var info = $"Wave {waveNumber}: {enemyCount} enemies, {difficultyPoints:F1} difficulty\n";
-
-        var tierCounts = new Dictionary<EnemyTier, int>();
-        foreach (var spawn in enemyComposition)
-        {
-            var tier = spawn.enemyConfig.tier;
-            tierCounts[tier] = tierCounts.GetValueOrDefault(tier, 0) + 1;
-        }
-
-        foreach (var tierCount in tierCounts.OrderBy(x => x.Key))
-        {
-            info += $"  Tier {(int)tierCount.Key}: {tierCount.Value}\n";
-        }
-
-        return info;
-    }
 }
 
 [System.Serializable]

@@ -9,32 +9,19 @@ public class EnemyDamageReceiver : MonoBehaviour, IDamageable
     {
         enemyBehaviour = GetComponent<EnemyBehaviour>();
         enemyDamageable = GetComponent<IDamageable>();
-
-        if (enemyBehaviour == null)
-        {
-            Debug.LogError("EnemyDamageReceiver: No EnemyBehaviour component found!");
-        }
     }
 
     public void TakeDamage(float damage, IDamageSource source)
     {
-        if (enemyBehaviour == null || !IsAlive())
-            return;
-
-        if (source.GetTeam() == DamageTeam.Enemy)
-        {
-            return;
-        }
-
+        if (enemyBehaviour == null || !IsAlive()) return;
+        if (source.GetTeam() == DamageTeam.Enemy) return;
         if (enemyDamageable != null)
         {
             enemyDamageable.TakeDamage(damage, source);
         }
         else
         {
-#pragma warning disable CS0618
-            enemyBehaviour.TakeDamage(damage);
-#pragma warning restore CS0618
+            enemyBehaviour.TakeDamage(damage, source);
         }
     }
 
